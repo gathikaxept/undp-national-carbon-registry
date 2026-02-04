@@ -37,6 +37,7 @@ The system continues to offer the below key features:
 * [Demo](#demo)
 * [Architecture](#architecture)
 * [Project Structure](#structure)
+* [Customization Framework and Extensibility](#customization)
 * [Run as Containers](#container)
 * [Run Services Locally](#local)
 * [Run Services on Cloud](#cloud)
@@ -261,6 +262,79 @@ The below diagram demonstrates the ledger behavior of project create, authorise,
     ├── .gitignore
     ├── docker-compose.yml              # Docker container definitions
     └── README.md
+
+<a name="customization"></a>
+
+## Customization Framework and Extensibility
+
+The registry is designed so that deployments can be tailored to different national frameworks, market designs, and operational needs. The following describes how the system supports customization and extension in an implementation-agnostic way.
+
+### 1. Functional Customization
+
+Core business logic can be adapted to reflect national or regional requirements:
+
+- **Workflows and approval processes:** Project lifecycle stages, authorization steps, and approval chains (e.g. Designated National Authority, certifiers, project developers) can be configured or extended to match local governance and decision-making rules.
+- **Sector and classification logic:** Sector classifications, sectoral scopes, mitigation types, and related taxonomies can be adjusted so that projects and credits align with national or international classification frameworks.
+- **Registry rules:** Rules governing credit issuance, transfer, retirement, and cancellation—including validation and business checks—can be adapted to reflect different market designs and compliance requirements.
+
+Customization is supported through shared domain logic, configurable enumerations, and service interfaces that allow alternative implementations without changing the core application flow.
+
+### 2. UI & Configuration Customization
+
+The user interface and presentation layer can be adapted for different deployments:
+
+- **Controlled vocabularies and dropdowns:** Options for sectors, mitigation types, document types, statuses, and other fixed lists are driven by enumerations and configuration. Updating these sources allows dropdowns and selection fields to reflect national or deployment-specific terminology and values without altering core UI components.
+- **Branding:** Logos, color schemes, and key labels can be changed via configuration and asset replacement. Theme colors, primary branding elements, and public-facing text can be aligned with national or institutional branding.
+- **Forms and data fields:** Form definitions, field labels, validation rules, and optional versus mandatory fields can be extended or reconfigured so that data capture matches local reporting and regulatory needs, while preserving the underlying data model where required for interoperability.
+
+Localization (see [Localization](#localization)) supports multiple languages and can be extended with new translation namespaces for both the core application and customized labels.
+
+### 3. Module Extensibility
+
+The system supports adding and composing functionality in a modular way:
+
+- **New functionality:** New features can be added as separate modules or services, registered with the runtime (e.g. via environment or deployment configuration), and integrated with existing APIs and the frontend where needed.
+- **Extending existing modules:** Existing modules (e.g. national API, analytics, replicator, data import) are structured so that new behaviour can be added through additional handlers, optional steps, or pluggable implementations of defined interfaces.
+- **Optional components:** Optional capabilities—such as analytics, external data import, verification support, or safeguards-related modules—can be enabled or disabled per deployment. The codebase uses interfaces and dependency injection so that optional components can be swapped or omitted without changing core services.
+
+Documentation on integrating and listing module integrations is maintained in the repository (e.g. under `modules/`). Implementing the relevant interfaces (e.g. ledger replicator, location service, file handler, data importer) allows new backends or integrations to be added in a consistent way.
+
+### 4. Data Integration & Interoperability
+
+The registry is built to integrate with external systems and support standardized data exchange:
+
+- **External registries:** Connections to other national or international registries can be implemented via API clients or import/export modules. The system supports synchronization of projects and credits with external platforms through defined workflows and field mappings, enabling alignment with international reporting and trading requirements.
+- **API- and file-based exchange:** REST APIs expose project, credit, company, and user operations for system-to-system integration. File-based exchange (e.g. CSV, structured formats) is supported for bulk data and reference data (e.g. regions, organisations). Data export services support standardized reporting formats (e.g. Agreed Electronic Format) for compliance and interoperability.
+- **Third-party systems:** Integration with MRV systems, verification bodies, and other information systems is possible through API authentication (e.g. API keys, JWT) and documented endpoints. The data model is aligned with common standards (e.g. CAD Trust, ITMO-related formats) to simplify integration with third-party tools.
+- **Visualization and geospatial data:** Map and dashboard components consume location and project data; geospatial layers and visualizations can be extended by providing location services (e.g. file-based region lists or external geocoding APIs) and by adding or customizing analytics and dashboard modules.
+
+### 5. Configuration Files & Customization Points
+
+The main customization touchpoints in the repository are organized as follows:
+
+| Area | Location / description |
+|------|------------------------|
+| **Frontend configuration** | `web/src/Config/` — API base URLs, theme colors, routing. |
+| **Theme and branding** | `web/src/Config/colorConfigs.ts`, `web/src/Styles/` (SCSS variables and theme files), `web/public/` (logos, favicon, fonts). |
+| **Controlled vocabularies (UI)** | `web/src/Definitions/Enums/` — enumerations for sectors, mitigation types, roles, statuses, and other dropdowns. |
+| **Backend enumerations and constants** | `backend/services/libs/shared/src/enum/`, `backend/services/libs/shared/src/constants/` — server-side vocabularies and constants. |
+| **DTOs and validation** | `backend/services/libs/shared/src/dto/` — request/response shapes and validation rules that affect API contracts and form behaviour. |
+| **Reference data** | `backend/services/countries.json`, `backend/services/regions.csv` (or equivalent path) — countries and geographic regions used by setup and location services. |
+| **Service selection** | Environment variables (e.g. `RUN_MODULE`, `LEDGER_TYPE`, `LOCATION_SERVICE`, `FILE_SERVICE`) — which modules and implementations are active. |
+| **Deployment and infrastructure** | `docker-compose.yml`, `deployment/`, `backend/services/serverless.yml` — service composition and cloud/deployment configuration. |
+| **Localization** | `web/public/locales/` — translation files per language and namespace. |
+
+Schema definitions, entity and view definitions, and ledger interfaces live under `backend/services/libs/shared/src/` (entities, view-entities, ledger-db, etc.) and define the core data model; extensions or country-specific overrides can be introduced via configuration packages or additional modules that consume these interfaces.
+
+### 6. Developer Guidance
+
+Developers customizing or extending the registry can use the following approach:
+
+- **Creating a configuration package for a country or deployment:** Gather all deployment-specific settings in one place: copy or extend the relevant config files (e.g. from `web/src/Config/`), enumerations (frontend and backend), reference data (countries, regions), and environment variables. Optionally use a dedicated folder or branch for “country X config” that overrides only these files, leaving the rest of the codebase unchanged. Document the chosen country code, default language, and any feature flags or disabled modules.
+- **Registering new modules or overriding defaults:** To add a new optional module (e.g. a new data importer or analytics provider), implement the appropriate interface (e.g. importer, replicator, location, file-handler) in the backend, register it in the relevant module (e.g. replicator or data-importer), and enable it via `RUN_MODULE` or equivalent environment configuration. To override default behaviour, provide a new implementation of the same interface and select it via the corresponding environment variable (e.g. `LOCATION_SERVICE`, `FILE_SERVICE`).
+- **Contributing new customization capabilities:** When adding a new customization point (e.g. a new config file, enum set, or feature flag), keep it in the locations indicated above (Config, Enums, constants, reference data, or deployment config). Prefer configuration and interfaces over hard-coded branches; document the new option in the README or in a dedicated docs file, and update this section if it introduces a new category of customization.
+
+For contribution and licensing terms, see [Standards and License](#standards) and [Governance and Support](#support).
 
 <a name="container"></a>
 
