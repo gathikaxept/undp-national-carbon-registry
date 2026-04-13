@@ -95,23 +95,47 @@ export class AefReportManagementService {
       authorizationId: project.authorizationId,
       actionTime: creditBlock.txTime,
       aquiringParty: this.configService.get("AEF.defaultAquiringParty"),
+      cooperativeApproachId: creditBlock.cooperativeApproachId || null,
+      authorizationPurpose: creditBlock.authorizationPurpose || null,
+      acquiringPartyCountryCode: project.acquiringPartyCountryCode || null,
+      isFirstTransfer: creditBlock.isNotTransferred && creditBlock.txType === TxType.TRANSFER,
+      reportingYear: new Date(creditBlock.txTime).getFullYear(),
     });
     if (creditBlock.txType == TxType.ISSUE) {
       newAefActionRecord.actionType = AefActionTypeEnum.AUTHORIZATION;
     } else if (creditBlock.txType == TxType.TRANSFER) {
-      newAefActionRecord.actionType = AefActionTypeEnum.TRANSFER;
+      if (creditBlock.isNotTransferred) {
+        newAefActionRecord.actionType = AefActionTypeEnum.FIRST_TRANSFER;
+        newAefActionRecord.isFirstTransfer = true;
+      } else {
+        newAefActionRecord.actionType = AefActionTypeEnum.TRANSFER;
+      }
     } else if (creditBlock.txType == TxType.RETIRE) {
       const txData: CreditRetireActionDto = creditBlock.txData;
-      if (txData.action == RetirementACtionEnum.ACCEPT) {
+      if (txData && txData.action == RetirementACtionEnum.ACCEPT) {
         const retireTrasaction = await this.creditTransactionsEntityRepository.findOne({
           where: { id: txData.transactionId },
         });
-        if (retireTrasaction.retirementType == CreditRetirementTypeEnum.CROSS_BORDER_TRANSACTIONS) {
+        if (!retireTrasaction) {
+          newAefActionRecord.actionType = AefActionTypeEnum.RETIRE;
+        } else if (retireTrasaction.retirementType == CreditRetirementTypeEnum.CROSS_BORDER_TRANSACTIONS) {
           newAefActionRecord.actionType = AefActionTypeEnum.CROSS_BOARDER_TRANSFER;
           newAefActionRecord.aquiringParty = retireTrasaction.country;
+          newAefActionRecord.acquiringPartyCountryCode = retireTrasaction.country;
+        } else if (retireTrasaction.retirementType == CreditRetirementTypeEnum.USE_TOWARDS_NDC) {
+          newAefActionRecord.actionType = AefActionTypeEnum.USE_TOWARDS_NDC;
+        } else if (retireTrasaction.retirementType == CreditRetirementTypeEnum.USE_FOR_OIMP) {
+          newAefActionRecord.actionType = AefActionTypeEnum.USE_FOR_OIMP;
+        } else if (retireTrasaction.retirementType == CreditRetirementTypeEnum.VOLUNTARY_CANCELLATIONS) {
+          newAefActionRecord.actionType = AefActionTypeEnum.VOLUNTARY_CANCELLATION;
+        } else if (retireTrasaction.retirementType == CreditRetirementTypeEnum.OMGE_CANCELLATION) {
+          newAefActionRecord.actionType = AefActionTypeEnum.OMGE_CANCELLATION;
         } else {
           newAefActionRecord.actionType = AefActionTypeEnum.RETIRE;
         }
+      } else if (!txData) {
+        // Retirement via retireToAccount (no txData with action field)
+        newAefActionRecord.actionType = AefActionTypeEnum.RETIRE;
       } else {
         return;
       }
@@ -198,6 +222,10 @@ export class AefReportManagementService {
         case AefReportTypeEnum.ACTIONS:
           prepData = this.prepareActionsData(resp);
           localFileName = `${AefReportTypeEnum.ACTIONS}`;
+          break;
+        case AefReportTypeEnum.ANNUAL_INFORMATION:
+          prepData = this.prepareActionsData(resp);
+          localFileName = `${AefReportTypeEnum.ANNUAL_INFORMATION}`;
           break;
         default:
           break;
