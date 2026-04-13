@@ -74,6 +74,12 @@ export class CreditBlocksEntity {
   })
   accountType: AccountType;
 
+  @Column({ type: "boolean", default: false })
+  omgeDeductedAtIssuance: boolean;
+
+  @Column({ type: "boolean", default: false })
+  sopDeductedAtIssuance: boolean;
+
   @BeforeInsert()
   async timestampAtInsert() {
     const timestamp = new Date().getTime();
