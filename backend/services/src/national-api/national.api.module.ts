@@ -17,6 +17,7 @@ import { CreditTransactionsManagementController } from "./credit.transactions.ma
 import { ReportsManagementController } from "./reports.management.controller";
 import { CooperativeApproachController } from "./cooperative-approach.controller";
 import { CorrespondingAdjustmentController } from "./corresponding-adjustment.controller";
+import { InitialReportController } from "./initial-report.controller";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CorrespondingAdjustmentController } from "./corresponding-adjustment.co
     ReportsManagementController,
     CooperativeApproachController,
     CorrespondingAdjustmentController,
+    InitialReportController,
   ],
   providers: [NationalAPIService, Logger],
 })
