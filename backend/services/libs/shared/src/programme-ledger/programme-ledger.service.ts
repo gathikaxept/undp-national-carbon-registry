@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectEntityManager } from "@nestjs/typeorm";
 import { PRECISION } from "@undp/carbon-credit-calculator/dist/esm/calculator";
 import { plainToClass } from "class-transformer";
@@ -51,7 +52,8 @@ export class ProgrammeLedgerService {
     private ledger: LedgerDBInterface,
     private helperService: HelperService,
     private readonly creditBlocksManagementService: CreditBlocksManagementService,
-    private readonly serialNumberManagementService: SerialNumberManagementService
+    private readonly serialNumberManagementService: SerialNumberManagementService,
+    private readonly configService: ConfigService
   ) {}
 
   public async createProgramme(programme: Programme): Promise<Programme> {
@@ -453,6 +455,13 @@ export class ProgrammeLedgerService {
             project.txTime,
             user
           );
+          // Mark blocks with OMGE/SOP deduction flags if auto-deduct is enabled
+          const autoDeduct = this.configService.get<boolean>("itmo.autoDeductAtIssuance");
+          if (autoDeduct) {
+            newBlock.omgeDeductedAtIssuance = true;
+            newBlock.sopDeductedAtIssuance = true;
+          }
+
           insertMap[
             this.ledger.creditBlocksTable + "#" + newBlock.creditBlockId
           ] = newBlock;
@@ -2826,5 +2835,45 @@ export class ProgrammeLedgerService {
       CreditRetirementTypeEnum.OMGE_CANCELLATION,
       "OMGE cancellation for overall mitigation in global emissions"
     );
+  }
+
+  /**
+   * Get the configured OMGE and SOP deduction percentages.
+   * Returns { omgePercentage, sopPercentage, autoDeductAtIssuance }.
+   */
+  public getDeductionConfig(): {
+    omgePercentage: number;
+    sopPercentage: number;
+    autoDeductAtIssuance: boolean;
+  } {
+    return {
+      omgePercentage: this.configService.get<number>("itmo.omgePercentage") || 2,
+      sopPercentage: this.configService.get<number>("itmo.sopPercentage") || 5,
+      autoDeductAtIssuance:
+        this.configService.get<boolean>("itmo.autoDeductAtIssuance") !== false,
+    };
+  }
+
+  /**
+   * Calculate OMGE and SOP deductions for a given credit amount.
+   * Returns the net amount after deductions.
+   */
+  public calculateDeductions(totalCredits: number): {
+    netCredits: number;
+    omgeAmount: number;
+    sopAmount: number;
+  } {
+    const config = this.getDeductionConfig();
+    if (!config.autoDeductAtIssuance) {
+      return { netCredits: totalCredits, omgeAmount: 0, sopAmount: 0 };
+    }
+    const omgeAmount = Math.floor(
+      (totalCredits * config.omgePercentage) / 100
+    );
+    const sopAmount = Math.floor(
+      (totalCredits * config.sopPercentage) / 100
+    );
+    const netCredits = totalCredits - omgeAmount - sopAmount;
+    return { netCredits, omgeAmount, sopAmount };
   }
 }
