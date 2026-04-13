@@ -39,6 +39,9 @@ import { CreditTransactionsEntity } from "../entities/credit.transactions.entity
 import { CreditRetireActionDto } from "../dto/credit.retire.action.dto";
 import { RetirementACtionEnum } from "../enum/retirement.action.enum";
 import { SerialNumberManagementService } from "../serial-number-management/serial-number-management.service";
+import { AccountType } from "../enum/account.type.enum";
+import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
+import { CreditRetirementTypeEnum } from "../enum/credit.retirement.type.enum";
 
 @Injectable()
 export class ProgrammeLedgerService {
@@ -2598,5 +2601,230 @@ export class ProgrammeLedgerService {
     );
 
     return updatedProgramme;
+  }
+
+  /**
+   * Retire credits to a specific account type (NDC, OIMP, voluntary cancellation, etc.)
+   * This implements the Article 6.2 requirement for distinct ITMO lifecycle events.
+   */
+  public async retireToAccount(
+    creditBlockId: string,
+    targetAccountType: AccountType,
+    amount: number,
+    projectRefId: string,
+    user: User,
+    retirementType: CreditRetirementTypeEnum,
+    remarks?: string,
+    country?: string,
+    organizationName?: string
+  ) {
+    const getQueries = {};
+    getQueries[this.ledger.creditBlocksTable] = {
+      creditBlockId: creditBlockId,
+    };
+    getQueries[this.ledger.projectTable] = {
+      refId: projectRefId,
+    };
+
+    const resp = await this.ledger.getAndUpdateTx(
+      getQueries,
+      (results: Record<string, dom.Value[]>) => {
+        const creditBlocks: CreditBlocksEntity[] = results[
+          this.ledger.creditBlocksTable
+        ].map((domValue) => {
+          return plainToClass(
+            CreditBlocksEntity,
+            JSON.parse(JSON.stringify(domValue))
+          );
+        });
+        if (creditBlocks.length <= 0) {
+          throw new HttpException(
+            this.helperService.formatReqMessagesString(
+              "project.creditBlockNotExistWIthCreditBlockId",
+              [creditBlockId]
+            ),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        const creditBlock = creditBlocks[0];
+
+        if (creditBlock.accountType !== AccountType.HOLDING) {
+          throw new HttpException(
+            "Credits can only be retired from a HOLDING account",
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+        if (creditBlock.creditAmount - creditBlock.reservedCreditAmount < amount) {
+          throw new HttpException(
+            this.helperService.formatReqMessagesString(
+              "project.notEnoughCreditAmount",
+              []
+            ),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+        const projects: ProjectEntity[] = results[this.ledger.projectTable].map(
+          (domValue) => {
+            return plainToClass(
+              ProjectEntity,
+              JSON.parse(JSON.stringify(domValue))
+            );
+          }
+        );
+        const project = projects.length > 0 ? projects[0] : null;
+
+        const txTime = new Date().getTime();
+        let updateMap = {};
+        let updateWhereMap = {};
+        let insertMap = {};
+
+        // Determine the transaction type based on target account
+        let txType: CreditTransactionTypesEnum;
+        switch (targetAccountType) {
+          case AccountType.RETIREMENT_NDC:
+            txType = CreditTransactionTypesEnum.USE_TOWARDS_NDC;
+            break;
+          case AccountType.RETIREMENT_OIMP:
+            txType = CreditTransactionTypesEnum.USE_FOR_OIMP;
+            break;
+          case AccountType.CANCELLATION_VOLUNTARY:
+            txType = CreditTransactionTypesEnum.VOLUNTARY_CANCELLATION;
+            break;
+          case AccountType.CANCELLATION_OMGE:
+            txType = CreditTransactionTypesEnum.OMGE_CANCELLATION;
+            break;
+          default:
+            txType = CreditTransactionTypesEnum.RETIRED;
+        }
+
+        if (creditBlock.creditAmount === amount) {
+          // Retire the entire block — update in place
+          updateMap[this.ledger.creditBlocksTable] = {
+            txRef: this.creditBlocksManagementService.getCreditBlockTxRef(
+              TxType.RETIRE,
+              creditBlock.ownerCompanyId,
+              0,
+              user.id
+            ),
+            txType: TxType.RETIRE,
+            txTime: txTime,
+            previousOwnerCompanyId: creditBlock.ownerCompanyId,
+            ownerCompanyId: 0,
+            isNotTransferred: false,
+            reservedCreditAmount: 0,
+            accountType: targetAccountType,
+            transactionRecords: [
+              ...creditBlock.transactionRecords,
+              {
+                id: `retire-${txTime}`,
+                type: txType,
+                status: CreditTransactionStatusEnum.COMPLETED,
+                amount: amount,
+              },
+            ],
+          };
+        } else {
+          // Split the block
+          const { firstSerialNumber, secondSerialNumber } =
+            this.serialNumberManagementService.splitCreditBlockSerialNumber(
+              creditBlock.serialNumber,
+              amount
+            );
+          // Update original block (remaining in HOLDING)
+          updateMap[this.ledger.creditBlocksTable] = {
+            txRef: this.creditBlocksManagementService.getCreditBlockTxRef(
+              TxType.CREDIT_BLOCK_SPLIT,
+              creditBlock.ownerCompanyId,
+              0,
+              user.id
+            ),
+            txType: TxType.CREDIT_BLOCK_SPLIT,
+            txTime: txTime,
+            creditAmount: creditBlock.creditAmount - amount,
+            serialNumber: firstSerialNumber,
+            transactionRecords: creditBlock.transactionRecords,
+          };
+          // Create new block in target account
+          const newBlockId =
+            this.serialNumberManagementService.getCreditBlockId(secondSerialNumber);
+          insertMap[this.ledger.creditBlocksTable + "#" + newBlockId] =
+            plainToClass(CreditBlocksEntity, {
+              creditBlockId: newBlockId,
+              txRef: this.creditBlocksManagementService.getCreditBlockTxRef(
+                TxType.RETIRE,
+                creditBlock.ownerCompanyId,
+                0,
+                user.id
+              ),
+              txTime: txTime,
+              txType: TxType.RETIRE,
+              previousOwnerCompanyId: creditBlock.ownerCompanyId,
+              ownerCompanyId: 0,
+              projectRefId: creditBlock.projectRefId,
+              serialNumber: secondSerialNumber,
+              vintage: creditBlock.vintage,
+              creditAmount: amount,
+              reservedCreditAmount: 0,
+              isNotTransferred: false,
+              accountType: targetAccountType,
+              cooperativeApproachId: creditBlock.cooperativeApproachId,
+              authorizationPurpose: creditBlock.authorizationPurpose,
+              transactionRecords: [
+                {
+                  id: `retire-${txTime}`,
+                  type: txType,
+                  status: CreditTransactionStatusEnum.COMPLETED,
+                  amount: amount,
+                },
+              ],
+            });
+        }
+
+        updateWhereMap[this.ledger.creditBlocksTable] = {
+          creditBlockId: creditBlockId,
+        };
+
+        // Update project balances if this is the first owner
+        if (project && creditBlock.isNotTransferred) {
+          updateMap[this.ledger.projectTable] = {
+            creditBalance: project.creditBalance - amount,
+            creditChange: amount,
+            creditRetired: project.creditRetired
+              ? Number(project.creditRetired) + amount
+              : amount,
+            txTime: txTime,
+            txType: TxType.RETIRE,
+          };
+          updateWhereMap[this.ledger.projectTable] = {
+            refId: projectRefId,
+          };
+        }
+
+        return [updateMap, updateWhereMap, insertMap];
+      }
+    );
+  }
+
+  /**
+   * Cancel credits for OMGE (Overall Mitigation in Global Emissions).
+   * Convenience wrapper around retireToAccount.
+   */
+  public async cancelForOMGE(
+    creditBlockId: string,
+    amount: number,
+    projectRefId: string,
+    user: User
+  ) {
+    return this.retireToAccount(
+      creditBlockId,
+      AccountType.CANCELLATION_OMGE,
+      amount,
+      projectRefId,
+      user,
+      CreditRetirementTypeEnum.OMGE_CANCELLATION,
+      "OMGE cancellation for overall mitigation in global emissions"
+    );
   }
 }

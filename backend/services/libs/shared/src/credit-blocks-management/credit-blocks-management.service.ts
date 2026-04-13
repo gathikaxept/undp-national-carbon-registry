@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { HelperService } from "../util/helpers.service";
 import { CreditBlocksEntity } from "../entities/credit.blocks.entity";
 import { TxType } from "../enum/txtype.enum";
+import { AccountType } from "../enum/account.type.enum";
 import { User } from "../entities/user.entity";
 import { SerialNumberManagementService } from "../serial-number-management/serial-number-management.service";
 import { plainToClass } from "class-transformer";
@@ -217,6 +218,9 @@ export class CreditBlocksManagementService {
       reservedCreditAmount: 0,
       transactionRecords: [],
       isNotTransferred: true,
+      accountType: AccountType.HOLDING,
+      cooperativeApproachId: project.cooperativeApproachId || null,
+      authorizationPurpose: project.authorizationPurpose || null,
     });
     return newBlock;
   }
