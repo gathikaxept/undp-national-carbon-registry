@@ -48,6 +48,8 @@ import Reports from "./Pages/Reports/Reports";
 import CooperativeApproaches from "./Pages/CooperativeApproaches/cooperativeApproaches";
 import AddCooperativeApproach from "./Pages/CooperativeApproaches/addCooperativeApproach";
 import CooperativeApproachDetails from "./Pages/CooperativeApproaches/cooperativeApproachDetails";
+import CaManagement from "./Pages/CorrespondingAdjustment/caManagement";
+import CaCalculation from "./Pages/CorrespondingAdjustment/caCalculation";
 
 const App = () => {
   const { t } = useTranslation(["common"]);
@@ -176,6 +178,15 @@ const App = () => {
                       path="view/:id"
                       element={<CooperativeApproachDetails />}
                     />
+                  </Route>
+                  <Route
+                    path="/correspondingAdjustments"
+                    element={
+                      <CustomLayout selectedKey="correspondingAdjustments/viewAll" />
+                    }
+                  >
+                    <Route path="viewAll" element={<CaManagement />} />
+                    <Route path="calculate" element={<CaCalculation />} />
                   </Route>
                   <Route
                     path="/companyManagement"
