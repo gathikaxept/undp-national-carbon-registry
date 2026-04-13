@@ -45,6 +45,9 @@ import { CreditBalancePage } from "./Pages/CreditPages/creditBalancePage";
 import { CreditTransfersPage } from "./Pages/CreditPages/creditTransfersPage";
 import { CreditRetirementsPage } from "./Pages/CreditPages/creditRetirementsPage";
 import Reports from "./Pages/Reports/Reports";
+import CooperativeApproaches from "./Pages/CooperativeApproaches/cooperativeApproaches";
+import AddCooperativeApproach from "./Pages/CooperativeApproaches/addCooperativeApproach";
+import CooperativeApproachDetails from "./Pages/CooperativeApproaches/cooperativeApproachDetails";
 
 const App = () => {
   const { t } = useTranslation(["common"]);
@@ -153,6 +156,25 @@ const App = () => {
                     <Route
                       path="retirements"
                       element={<CreditRetirementsPage />}
+                    />
+                  </Route>
+                  <Route
+                    path="/cooperativeApproaches"
+                    element={
+                      <CustomLayout selectedKey="cooperativeApproaches/viewAll" />
+                    }
+                  >
+                    <Route
+                      path="viewAll"
+                      element={<CooperativeApproaches />}
+                    />
+                    <Route
+                      path="add"
+                      element={<AddCooperativeApproach />}
+                    />
+                    <Route
+                      path="view/:id"
+                      element={<CooperativeApproachDetails />}
                     />
                   </Route>
                   <Route

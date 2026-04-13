@@ -1,5 +1,6 @@
 import { BeforeInsert, Column, Entity, PrimaryColumn } from "typeorm";
 import { TxType } from "../enum/txtype.enum";
+import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
 import { CreditTransactionLedgerRecordDto } from "../dto/credit.transaction.ledger.record.dto";
 
 @Entity()
@@ -52,6 +53,17 @@ export class CreditBlocksEntity {
 
   @Column({ type: "bigint" })
   createTime: number;
+
+  @Column({ nullable: true })
+  cooperativeApproachId: string;
+
+  @Column({
+    type: "enum",
+    enum: AuthorizationPurpose,
+    array: false,
+    nullable: true,
+  })
+  authorizationPurpose: AuthorizationPurpose;
 
   @BeforeInsert()
   async timestampAtInsert() {

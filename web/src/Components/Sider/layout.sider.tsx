@@ -7,6 +7,7 @@ import * as Icon from "react-bootstrap-icons";
 import {
   AppstoreOutlined,
   DashboardOutlined,
+  GlobalOutlined,
   SettingOutlined,
   ShopOutlined,
   SplitCellsOutlined,
@@ -62,6 +63,11 @@ const LayoutSider = (props: LayoutSiderProps) => {
       t("nav:projectList"),
       "programmeManagement/viewAll",
       <UnorderedListOutlined />
+    ),
+    getItem(
+      "Cooperative Approaches",
+      "cooperativeApproaches/viewAll",
+      <GlobalOutlined />
     ),
     getItem(t("nav:companies"), "companyManagement/viewAll", <ShopOutlined />),
     getItem(t("nav:users"), "userManagement/viewAll", <UserOutlined />),
