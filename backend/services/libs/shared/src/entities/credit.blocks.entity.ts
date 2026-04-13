@@ -1,6 +1,7 @@
 import { BeforeInsert, Column, Entity, PrimaryColumn } from "typeorm";
 import { TxType } from "../enum/txtype.enum";
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
+import { AccountType } from "../enum/account.type.enum";
 import { CreditTransactionLedgerRecordDto } from "../dto/credit.transaction.ledger.record.dto";
 
 @Entity()
@@ -64,6 +65,14 @@ export class CreditBlocksEntity {
     nullable: true,
   })
   authorizationPurpose: AuthorizationPurpose;
+
+  @Column({
+    type: "enum",
+    enum: AccountType,
+    array: false,
+    default: AccountType.HOLDING,
+  })
+  accountType: AccountType;
 
   @BeforeInsert()
   async timestampAtInsert() {
