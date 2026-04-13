@@ -8,6 +8,7 @@ import {
   AppstoreOutlined,
   CalculatorOutlined,
   DashboardOutlined,
+  FileTextOutlined,
   GlobalOutlined,
   SettingOutlined,
   ShopOutlined,
@@ -107,6 +108,11 @@ const LayoutSider = (props: LayoutSiderProps) => {
         "Corresponding Adjustments",
         "correspondingAdjustments/viewAll",
         <CalculatorOutlined />
+      ),
+      getItem(
+        "Initial Reports",
+        "initialReports/viewAll",
+        <FileTextOutlined />
       )
     );
   }

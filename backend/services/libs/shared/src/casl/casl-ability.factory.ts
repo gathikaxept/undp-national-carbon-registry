@@ -35,6 +35,7 @@ import { DocumentEntity } from "../entities/document.entity";
 import { ProjectEntity } from "../entities/projects.entity";
 import { CooperativeApproach } from "../entities/cooperative.approach.entity";
 import { CorrespondingAdjustment } from "../entities/corresponding.adjustment.entity";
+import { InitialReport } from "../entities/initial.report.entity";
 
 type Subjects = InferSubjects<typeof EntitySubject> | "all";
 
@@ -167,6 +168,7 @@ export class CaslAbilityFactory {
         can(Action.Read, Programme);
         can(Action.Read, CooperativeApproach);
         can(Action.Read, CorrespondingAdjustment);
+        can(Action.Read, InitialReport);
 
         if (user.role !== Role.ViewOnly) {
           can(Action.Create, Emission);
@@ -179,6 +181,7 @@ export class CaslAbilityFactory {
           can(Action.Manage, ProgrammeCertify);
           can(Action.Manage, CooperativeApproach);
           can(Action.Manage, CorrespondingAdjustment);
+          can(Action.Manage, InitialReport);
         }
 
         if (user.role === Role.Root) {
@@ -205,6 +208,7 @@ export class CaslAbilityFactory {
         can(Action.Read, ProgrammeTransfer);
         can(Action.Read, CooperativeApproach);
         can(Action.Read, CorrespondingAdjustment);
+        can(Action.Read, InitialReport);
 
         if (user.role !== Role.ViewOnly) {
           can(Action.Create, Emission);
@@ -217,6 +221,7 @@ export class CaslAbilityFactory {
           can(Action.Manage, ProgrammeCertify);
           can(Action.Manage, CooperativeApproach);
           can(Action.Manage, CorrespondingAdjustment);
+          can(Action.Manage, InitialReport);
         }
       }
 
