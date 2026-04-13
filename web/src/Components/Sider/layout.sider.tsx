@@ -6,6 +6,7 @@ import "./layout.sider.scss";
 import * as Icon from "react-bootstrap-icons";
 import {
   AppstoreOutlined,
+  CalculatorOutlined,
   DashboardOutlined,
   GlobalOutlined,
   SettingOutlined,
@@ -101,7 +102,12 @@ const LayoutSider = (props: LayoutSiderProps) => {
     items.splice(
       3,
       0,
-      getItem(t("nav:reports"), "reports", <Icon.ClipboardData />)
+      getItem(t("nav:reports"), "reports", <Icon.ClipboardData />),
+      getItem(
+        "Corresponding Adjustments",
+        "correspondingAdjustments/viewAll",
+        <CalculatorOutlined />
+      )
     );
   }
   

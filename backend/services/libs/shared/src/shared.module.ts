@@ -26,6 +26,7 @@ import { AnalyticsModule } from "./analytics/analytics.module";
 import { CreditTransactionsManagementModule } from "./credit-transactions-management/credit-transactions-management.module";
 import { AefReportManagementModule } from "./aef-report-management/aef-report-management.module";
 import { CooperativeApproachModule } from "./cooperative-approach/cooperative-approach.module";
+import { CorrespondingAdjustmentModule } from "./corresponding-adjustment/corresponding-adjustment.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { CooperativeApproachModule } from "./cooperative-approach/cooperative-ap
     CreditTransactionsManagementModule,
     AefReportManagementModule,
     CooperativeApproachModule,
+    CorrespondingAdjustmentModule,
   ],
   providers: [SharedService],
   exports: [
@@ -85,6 +87,7 @@ import { CooperativeApproachModule } from "./cooperative-approach/cooperative-ap
     CreditTransactionsManagementModule,
     AefReportManagementModule,
     CooperativeApproachModule,
+    CorrespondingAdjustmentModule,
   ],
 })
 export class SharedModule {}
