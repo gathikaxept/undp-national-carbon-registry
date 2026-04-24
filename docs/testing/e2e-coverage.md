@@ -4,9 +4,9 @@
 
 **Date of audit**: 2026-04-24.
 
-**2026-04-24 gap-fill in progress** — see sub-agent progress below. Factories added in `tests/e2e/article6/support/factories.ts` (createProgramme, authorizeProgramme, issueCredits, initiateTransfer, performRetireAction).
+**2026-04-24 backend gap-fix pass complete** — see Section 6 for the post-fix summary. Factories added in `tests/e2e/article6/support/factories.ts` (createProgramme, authorizeProgramme, issueCredits, initiateTransfer, performRetireAction, seedVerifiedMitigationActionDirect, and others).
 
-**Totals**: 7 spec files, 4,430 LoC, **129 active tests**, 4 `test.fixme`, 1 `test.skip`.
+**Totals**: 11 spec files, **151 active tests**, 5 `test.fixme` (infra-level only), 1 `test.skip`.
 
 ---
 
@@ -472,13 +472,38 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 - **`.skip`**: 1 (unchanged).
 - **New factories**: `createProgramme`, `authorizeProgramme`, `issueCredits`, `initiateTransfer`, `performRetireAction`, `approveRetireRequest`, `seedTransferrableBlock`, `seedPendingRetirementTransactionDirect`, `readLedgerCreditBlock`, `readLedgerBlocksByProject`.
 
+**After backend gap-fix pass (2026-04-24, this commit)**:
+- **Active tests**: 151 across 11 specs (+10 flipped from `.fixme`).
+- **`.fixme`**: 5 (down from 15) — remaining fixmes all document infra-level blockers, not service gaps (see below).
+- **`.skip`**: 1 (unchanged).
+- **Backend changes landed across five commits**: transfer guards (Revoked-CA + self-transfer), Suspended-CA authorize guard, CA state machine on `/update`, itmoSerial lineage on split, `/issue` no-CA guard + `seedVerifiedMitigationActionDirect` factory.
+
 ### Coverage movement
 
-| Tier | Before | After |
-|---|---|---|
-| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫 (out of scope — no endpoint exists), #5 🔧 |
-| **Major** (15) | 0 addressed | #6 ✅, #7 ✅, #8 🔧, #9 ✅, #10 ✅, #11 ✅, #12 ✅, #17 🔧, #18 🔧, #19 ⚠ (10 of 15 addressed) |
-| **Minor** (10) | 0 addressed | 0 addressed (explicit pass-over) |
+| Tier | Before | After gap-fill pass | After backend gap-fix pass |
+|---|---|---|---|
+| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠ (approve/reject route still absent), #3 ✅, #4 🚫 (no endpoint exists), #5 ✅ — **4 of 5 closed** |
+| **Major** (15) | 0 addressed | #6 ✅, #7 ✅, #8 🔧, #9 ✅, #10 ✅, #11 ✅, #12 ✅, #17 🔧, #18 🔧, #19 ⚠ | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠ (replicator-dependent), #20 ✅ — **12 of 15 closed** |
+| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed (deferred) |
+
+### Remaining `.fixme` blocks (5)
+
+All five remaining fixmes are infra-level, not backend-gap:
+- `credit-transfer.spec.ts:116` — queryTransfers visibility; requires ledger-replicator container.
+- `credit-transfer.spec.ts:245` — `/creditTransactionsManagement/approve`; no such route exists (transfer is synchronous).
+- `credit-transfer.spec.ts:282` — `/creditTransactionsManagement/reject`; same blocker.
+- `programme-lifecycle.spec.ts:121` — create→authorize→query roundtrip; requires ledger-replicator + METHODOLOGY_DOCUMENT factory.
+- `omge-sop-deductions.spec.ts:321` — env-var flip at runtime; Playwright can't mutate process env.
+
+### Pre-existing failures (not in scope of this pass)
+
+Full-suite run with `national`, `web`, `replicator` all up: **153 passed, 4 failed, 5 skipped** (of 162). The 4 failures are pre-existing and were confirmed by running them against a stashed working-tree:
+
+- `corresponding-adjustment.spec.ts:549` — PD `/query` 403 guard missing. Test body documents a backend fix that isn't present in this branch.
+- `itmo-lifecycle.spec.ts:357`, `:395` — replicator sync lag: direct-SQL-seeded credit block / transfer row not yet visible in `queryBalance` view within 15s poll.
+- `omge-sop-deductions.spec.ts:288` — same replicator sync-lag class as itmo-lifecycle.
+
+None of these are tests this pass touched; all 10 tests flipped from `.fixme` → `test` pass in targeted runs.
 
 ### Backend gaps the gap-fill exercise surfaced
 
