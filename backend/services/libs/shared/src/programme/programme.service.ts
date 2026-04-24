@@ -5826,6 +5826,21 @@ export class ProgrammeService {
       );
     }
 
+    // Dec 2/CMA.3 Annex chapter V para 18: Article 6.2 ITMO issuance is
+    // only permitted under a live cooperative approach linkage. The
+    // symmetric guard on /authorize (see authorizeProgramme below) fires
+    // at the moment of authorization; this guard repeats the same check
+    // on /issue so a programme whose CA link was dropped after
+    // authorization cannot mint fresh credits. Mirrors the guard at
+    // programme.service.ts authorizeProgramme so the message cites the
+    // same clause.
+    if (program.article6trade && !program.cooperativeApproachId) {
+      throw new HttpException(
+        "Article 6.2 programmes must be linked to a cooperative approach before credit issuance (Dec 2/CMA.3 Annex para 18).",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
     let verfiedMitigationMap = {};
     let totalCreditIssuance = 0;
     let countedActions = [];

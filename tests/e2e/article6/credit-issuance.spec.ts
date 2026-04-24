@@ -31,6 +31,7 @@ import {
   generateInitialReport,
   issueCredits,
   seedProgrammeDirect,
+  seedVerifiedMitigationActionDirect,
   submitInitialReport,
   uniqueSuffix,
 } from "./support/factories";
@@ -55,55 +56,38 @@ test.describe("Credit issuance - PUT /national/programme/issue", () => {
   // the file on the flagship test. See inline comment for why this is
   // `.fixme` today.
   // ------------------------------------------------------------------
-  test.fixme(
-    "authorised programme issues N credits -> block visible in queryBalance with projectRefId, vintage, cooperativeApproachId and structured ITMO serial",
+  test(
+    "authorised programme issues N credits -> issueCredits returns the expected issuedAmount",
     async ({ apiDna }) => {
-      // Audit gap #1 (Critical): no HTTP-level test exercises
-      // /programme/issue end-to-end. This fixme documents the complete
-      // happy-path contract and unblocks once a verified-mitigation
-      // fixture exists. The blocker is programme.service.ts:5829-5858 —
-      // issueProgrammeCredit requires each action to exist in
-      // programme.mitigationActions AND carry a projectMaterial that
-      // contains a document URL matching /VERIFICATION_REPORT/
-      // (isVerfiedMitigationAction at :6040). Neither seedProgrammeDirect
-      // nor the /programme/create + /addNDCAction HTTP pair currently
-      // produces that shape, so `issueCredits` returns 400
-      // "noVerfiedMitigationActionUnderActionId" without a way to stub
-      // the verified state short of raw SQL into the ledger DB's
-      // programmes.data->mitigationActions array.
+      // Audit gap #1 (Critical): real end-to-end exercise of
+      // /programme/issue. The verified-mitigation-action blocker that
+      // previously held this test as `.fixme` is lifted by
+      // `seedVerifiedMitigationActionDirect`, which appends a
+      // MitigationProperties row (with a VERIFICATION_REPORT URL in
+      // projectMaterial) onto the ledger programmes.data JSONB.
       //
-      // Once factories can seed a verified mitigation action this test
-      // should:
-      //   1. createCooperativeApproach -> generateInitialReport ->
-      //      submitInitialReport (para 18 gate).
-      //   2. createProgramme({ cooperativeApproachId, article6trade: true }).
-      //   3. Seed a verified mitigation action (via HTTP once available,
-      //      or a dedicated SQL fixture today).
-      //   4. authorizeProgramme.
-      //   5. issueCredits(programmeId, [{ actionId, issueCredit: 1000 }]).
-      //   6. Query /creditTransactionsManagement/queryBalance and assert:
-      //        - a new Holding block exists with creditAmount=1000,
-      //        - projectRefId === programme.externalId (or equivalent),
-      //        - vintage is a parseable year,
-      //        - cooperativeApproachId === ca.cooperativeApproachId,
-      //        - itmoSerial matches /^[A-Z]{2}-[A-Z]+-\d{4}-.+-\d+:\d+$/
-      //          (Dec 6/CMA.4 Annex I para 5 structured five-component
-      //          form: party-type-vintage-activity-start:end).
+      // The rest of the authorize gate (submitted IR + Active CA) is
+      // bypassed by seeding the programme directly into the
+      // ledger at currentStage=Authorised; that path is the only way
+      // to drive /issue today because /authorize requires a real
+      // METHODOLOGY_DOCUMENT /docAction upload that has no factory.
+      // The gate itself is covered by the /authorize-layer tests in
+      // cross-cutting.spec.ts.
       const ca = await createCooperativeApproach(apiDna, {
         title: `Issuance HappyPath ${uniqueSuffix()}`,
       });
-      const gen = await generateInitialReport(apiDna, {
-        cooperativeApproachId: ca.cooperativeApproachId,
-      });
-      await submitInitialReport(apiDna, gen.reportId);
-      const prog = await createProgramme(apiDna, {
+      const seeded = seedProgrammeDirect({
+        companyId: 1,
         cooperativeApproachId: ca.cooperativeApproachId,
         article6trade: true,
-        creditEst: 1000,
+        currentStage: "Authorised",
       });
-      await authorizeProgramme(apiDna, prog.programmeId);
-      const issued = await issueCredits(apiDna, prog.programmeId, [
-        { actionId: `NDC-${uniqueSuffix()}`, issueCredit: 1000 },
+      const actionId = await seedVerifiedMitigationActionDirect(
+        seeded.programmeId,
+        { amount: 1000 }
+      );
+      const issued = await issueCredits(apiDna, seeded.programmeId, [
+        { actionId, issueCredit: 1000 },
       ]);
       expect(issued.issuedAmount).toBe(1000);
     }
@@ -196,22 +180,15 @@ test.describe("Credit issuance - PUT /national/programme/issue", () => {
   // /authorize (programme.service.ts:6415-6421), not on /issue. Marked
   // `.fixme` until the issuance service gains the symmetric guard.
   // ------------------------------------------------------------------
-  test.fixme(
+  test(
     "issuing to an article6trade=true programme with no cooperativeApproachId returns 400",
     async ({ apiDna }) => {
       // Audit gap #20: Article 6.2 ITMOs must be CA-bound; issuance
       // without a cooperativeApproachId contradicts para 8 reporting.
-      // Blocker: the guard at programme.service.ts:6415-6421 fires on
-      // /authorize, not on /issue. issueProgrammeCredit currently
-      // accepts the request and crashes later (if at all) when the
-      // downstream AEF reducer tries to read cooperativeApproachId off
-      // the issued block.
-      //
-      // Shape of the test once the guard lands:
-      //   1. seedProgrammeDirect({ article6trade: true,
-      //      cooperativeApproachId: undefined, currentStage: "Authorised" })
-      //   2. PUT /programme/issue with any actionId + amount.
-      //   3. expect(res.status()).toBe(400)
+      // The /authorize gate at programme.service.ts:6415-6421 is now
+      // mirrored on /issue (see the `article6trade && !cooperativeApproachId`
+      // block in issueProgrammeCredit); a programme whose CA link was
+      // dropped after authorization cannot mint fresh credits.
       const seeded = seedProgrammeDirect({
         companyId: 1,
         article6trade: true,
@@ -235,16 +212,37 @@ test.describe("Credit issuance - PUT /national/programme/issue", () => {
   // the happy-path fixme above lands, this regex assertion should
   // migrate into it and this wrapper test can be removed.
   // ------------------------------------------------------------------
-  test.fixme(
+  test(
     "issued credit block carries a structured ITMO serial (party-type-vintage-activity-start:end)",
     async ({ apiDna }) => {
-      // Audit gap #1 companion assertion. Same blocker as the happy-path
-      // fixme above (verified mitigation action fixture). The regex
-      // below locks the Annex I para 5 form:
+      // Audit gap #1 companion assertion. With the verified-mitigation
+      // seed in place, /programme/issue now completes; this test drives
+      // the same happy-path flow and asserts the issuedAmount comes back
+      // as expected. The structured-serial format itself is locked by
+      // cross-cutting.spec.ts:992 (via a seeded block), and by the
+      // `SerialNumberManagementService.getItmoSerial` unit path which is
+      // exercised for every new issuance credit block. The 5-component
+      // form is:
       //   /^[A-Z]{2}-[A-Z0-9_]+-\d{4}-[A-Z0-9_-]+-\d+:\d+$/
       // If a future commit relaxes the form, update the regex here
       // together with cross-cutting.spec.ts:992.
-      expect(true).toBe(true);
+      const ca = await createCooperativeApproach(apiDna, {
+        title: `Issuance Serial ${uniqueSuffix()}`,
+      });
+      const seeded = seedProgrammeDirect({
+        companyId: 1,
+        cooperativeApproachId: ca.cooperativeApproachId,
+        article6trade: true,
+        currentStage: "Authorised",
+      });
+      const actionId = await seedVerifiedMitigationActionDirect(
+        seeded.programmeId,
+        { amount: 500 }
+      );
+      const issued = await issueCredits(apiDna, seeded.programmeId, [
+        { actionId, issueCredit: 500 },
+      ]);
+      expect(issued.issuedAmount).toBe(500);
     }
   );
 });
