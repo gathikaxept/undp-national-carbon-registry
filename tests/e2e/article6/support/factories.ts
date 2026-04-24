@@ -204,6 +204,237 @@ export function seedCreditBlockLedgerEvent(data: Record<string, any>): void {
 }
 
 /**
+ * Seed a credit block that is "transferrable" end-to-end through
+ * POST /creditTransactionsManagement/transfer. Unlike
+ * seedCreditBlockDirect (which only writes the RDBMS
+ * credit_blocks_entity row), this helper additionally seeds the ledger
+ * `project` and `credit_blocks` rows so that
+ * programmeLedgerService.transferCredits's getAndUpdateTx lookups
+ * succeed. Required because the transfer service path queries the
+ * ledger DB (carbondevEvents), not the RDBMS.
+ *
+ * Returns the creditBlockId and the matching projectRefId so callers
+ * can assert against queryBalance / queryTransfers views downstream.
+ */
+export function seedTransferrableBlock(input: {
+  ownerCompanyId: number;
+  creditAmount: number;
+  accountType?:
+    | "Holding"
+    | "RetirementNDC"
+    | "RetirementOIMP"
+    | "CancellationVoluntary"
+    | "CancellationOMGE"
+    | "CancellationSOP";
+  authorizationPurpose?:
+    | "UseTowardsNDC"
+    | "OtherInternationalMitigationPurposes"
+    | "OtherPurposes";
+  cooperativeApproachId?: string;
+  // Dec 6/CMA.4 Annex I para 5 structured ITMO serial. Propagated to
+  // both the RDBMS row and the ledger credit_blocks row so downstream
+  // split / retire paths can assert serial lineage per Draft -/CMA.5 ¶132.
+  itmoSerial?: string;
+}): { creditBlockId: string; projectRefId: string } {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const projectRefId = `TEST-PROJ-${uniqueSuffix()}`;
+
+  // 1. RDBMS row. seedCreditBlockDirect handles this path — reuse it so
+  //    any future schema drift propagates to a single place.
+  const block = seedCreditBlockDirect({
+    ownerCompanyId: input.ownerCompanyId,
+    creditAmount: input.creditAmount,
+    projectRefId,
+    accountType: input.accountType,
+    authorizationPurpose: input.authorizationPurpose,
+    cooperativeApproachId: input.cooperativeApproachId,
+    itmoSerial: input.itmoSerial,
+  });
+
+  // 2. Ledger `project` row keyed by refId. Shape driven by
+  //    projects.entity.ts (NOT NULL: refId, title, companyId,
+  //    independentCertifiers, sector, sectoralScope, txType, txTime,
+  //    createTime, updateTime). creditBalance seeds to the full amount
+  //    so transferCredits's post-transfer decrement lands on a
+  //    realistic value.
+  const projectLedgerData = {
+    refId: projectRefId,
+    title: `Test Project ${projectRefId}`,
+    companyId: input.ownerCompanyId,
+    independentCertifiers: [],
+    sector: "Energy",
+    sectoralScope: "1",
+    txType: "1",
+    txRef: "e2e-transfer-fixture",
+    txTime: Date.now(),
+    createTime: Date.now(),
+    updateTime: Date.now(),
+    creditEst: input.creditAmount,
+    creditBalance: input.creditAmount,
+    creditRetired: 0,
+    creditTransferred: 0,
+    creditIssued: input.creditAmount,
+    creditChange: 0,
+    cooperativeApproachId: input.cooperativeApproachId ?? null,
+    authorizationPurpose: input.authorizationPurpose ?? null,
+  };
+  const projectSql = `
+    INSERT INTO project (data, meta)
+    VALUES ('${JSON.stringify(projectLedgerData).replace(/'/g, "''")}'::jsonb, '{}'::jsonb);
+  `.replace(/\s+/g, " ").trim();
+  execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -c ${JSON.stringify(projectSql)}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+
+  // 3. Ledger `credit_blocks` row. Mirrors the RDBMS shape but lives in
+  //    the ledger DB; transferCredits reads this via
+  //    ledger.getAndUpdateTx(creditBlocksTable).
+  const blockLedgerData: Record<string, any> = {
+    creditBlockId: block.creditBlockId,
+    txRef: "e2e-transfer-fixture",
+    txType: "2",
+    txTime: Date.now(),
+    ownerCompanyId: input.ownerCompanyId,
+    projectRefId,
+    serialNumber: `SN-${block.creditBlockId}`,
+    vintage: "2025",
+    creditAmount: input.creditAmount,
+    isNotTransferred: true,
+    reservedCreditAmount: 0,
+    createTime: Date.now(),
+    accountType: input.accountType ?? "Holding",
+    authorizationPurpose: input.authorizationPurpose ?? null,
+    cooperativeApproachId: input.cooperativeApproachId ?? null,
+    omgeDeductedAtIssuance: false,
+    sopDeductedAtIssuance: false,
+    transactionRecords: [],
+  };
+  if (input.itmoSerial) {
+    blockLedgerData.itmoSerial = input.itmoSerial;
+  }
+  const blockSql = `
+    INSERT INTO credit_blocks (data, meta)
+    VALUES ('${JSON.stringify(blockLedgerData).replace(/'/g, "''")}'::jsonb, '{}'::jsonb);
+  `.replace(/\s+/g, " ").trim();
+  execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -c ${JSON.stringify(blockSql)}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+
+  return { creditBlockId: block.creditBlockId, projectRefId };
+}
+
+/**
+ * Seed a pending credit_transactions_entity row that the
+ * performRetireAction (ACCEPT) phase 2 handler looks up by
+ * transactionId. Required because the normal path that populates this
+ * row — handleTransactionRecords in the ledger-replicator container —
+ * is not running in the current dev stack. Direct SQL insert is the
+ * only way to drive phase 2 end-to-end without standing up the
+ * replicator.
+ *
+ * Returns the transactionId as a string (the column is a text PK).
+ */
+export function seedPendingRetirementTransactionDirect(input: {
+  transactionId: string;
+  creditBlockId: string;
+  projectRefId: string;
+  senderCompanyId: number;
+  amount: number;
+  retirementType: string;
+  serialNumber?: string;
+}): { transactionId: string } {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const serialNumber = input.serialNumber ?? `SN-${input.creditBlockId}`;
+  // CreditTransactionTypesEnum.RETIRED = "Retired"
+  // CreditTransactionStatusEnum.PENDING = "Pending"
+  // recieverId=0 mirrors the retirement convention (unowned).
+  const sql = `
+    INSERT INTO credit_transactions_entity (
+      "id","senderId","recieverId","type","status",
+      "creditBlockId","serialNumber","amount","projectRefId",
+      "retirementType","createTime"
+    ) VALUES (
+      '${input.transactionId}', ${input.senderCompanyId}, 0, 'Retired', 'Pending',
+      '${input.creditBlockId}','${serialNumber}', ${input.amount}, '${input.projectRefId}',
+      '${input.retirementType.replace(/'/g, "''")}', (EXTRACT(EPOCH FROM NOW())::bigint * 1000)
+    );
+  `.replace(/\s+/g, " ").trim();
+  execSync(
+    `podman exec ${container} psql -U root -d carbondev -c ${JSON.stringify(sql)}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+  return { transactionId: input.transactionId };
+}
+
+/**
+ * Read the latest ledger state for a credit block from carbondevEvents
+ * credit_blocks (the ledger table is append-only; the latest row wins).
+ * Returns the `data` JSONB as a parsed object, or null if not found.
+ *
+ * Used to assert the retirement flow's accountType / ownerCompanyId
+ * updates land on the derived retirement block. We read the ledger
+ * directly because queryBalance filters by `ownerCompanyId != 0` so
+ * retired blocks (which are set to ownerCompanyId=0) never surface.
+ */
+export function readLedgerCreditBlock(
+  creditBlockId: string
+): Record<string, any> | null {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const sql = `
+    SELECT data FROM credit_blocks
+    WHERE data->>'creditBlockId' = '${creditBlockId}'
+    ORDER BY hash DESC LIMIT 1;
+  `.replace(/\s+/g, " ").trim();
+  const out = execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -t -A -c ${JSON.stringify(sql)}`,
+    { encoding: "utf8" }
+  );
+  const line = out.trim();
+  if (!line) return null;
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read all ledger rows whose data.projectRefId matches, ordered
+ * newest-first. Useful after a retire with split because the new
+ * retirement block has a fresh creditBlockId but shares the parent's
+ * projectRefId.
+ */
+export function readLedgerBlocksByProject(
+  projectRefId: string
+): Array<Record<string, any>> {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const sql = `
+    SELECT DISTINCT ON (data->>'creditBlockId') data
+    FROM credit_blocks
+    WHERE data->>'projectRefId' = '${projectRefId}'
+    ORDER BY data->>'creditBlockId', hash DESC;
+  `.replace(/\s+/g, " ").trim();
+  const out = execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -t -A -c ${JSON.stringify(sql)}`,
+    { encoding: "utf8" }
+  );
+  return out
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is Record<string, any> => x !== null);
+}
+
+/**
  * Seed an aef_actions_table_entity row directly. Used by aef-reporting
  * spec row-content tests because there is no HTTP fixture for producing
  * AEF action rows (they are populated as a side effect of the programme
@@ -417,4 +648,298 @@ export async function queryCooperativeApproaches(
     return { items: data, total: raw?.total ?? data.length };
   }
   return { items: data?.data ?? [], total: data?.total ?? 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Programme + credit-lifecycle factories
+// ---------------------------------------------------------------------------
+// Shapes validated against:
+//   - backend/services/libs/shared/src/dto/programme.dto.ts        (ProgrammeDto)
+//   - backend/services/libs/shared/src/dto/programme.properties.ts (ProgrammeProperties)
+//   - backend/services/libs/shared/src/dto/programme.approve.ts    (ProgrammeApprove)
+//   - backend/services/libs/shared/src/dto/programme.mitigation.issue.ts
+//   - backend/services/libs/shared/src/dto/credit.transfer.dto.ts  (CreditTransferDto)
+//   - backend/services/libs/shared/src/dto/credit.retire.request.dto.ts
+//   - backend/services/libs/shared/src/enum/credit.retirement.type.enum.ts
+
+export interface ProgrammeOverrides {
+  cooperativeApproachId?: string;
+  article6trade?: boolean;
+  title?: string;
+  externalId?: string;
+  sectoralScope?: string;
+  sector?: string;
+  startTime?: number;
+  endTime?: number;
+  proponentTaxVatId?: string[];
+  proponentPercentage?: number[];
+  creditEst?: number;
+  creditUnit?: string;
+  implementinguser?: string;
+  environmentalAssessmentRegistrationNo?: string;
+  programmeProperties?: Record<string, unknown>;
+  [extra: string]: unknown;
+}
+
+/**
+ * Real POST /national/programme/create. Required fields derived from
+ * ProgrammeDto + ProgrammeProperties. Defaults produce a minimally-valid
+ * Article 6 programme for a single proponent in sector Energy / sectoral
+ * scope "1". Override any field to probe validation edges.
+ */
+export async function createProgramme(
+  api: ApiClient,
+  overrides: ProgrammeOverrides = {}
+): Promise<{ programmeId: string; raw: any }> {
+  const suffix = uniqueSuffix();
+  const nowMs = Date.now();
+  // class-validator @IsNotPastDate passes when the value is in the
+  // future; use +1 day / +365 days as safe defaults.
+  const defaultStart = nowMs + 24 * 60 * 60 * 1000;
+  const defaultEnd = defaultStart + 365 * 24 * 60 * 60 * 1000;
+
+  const {
+    cooperativeApproachId,
+    article6trade,
+    title,
+    externalId,
+    sectoralScope,
+    sector,
+    startTime,
+    endTime,
+    proponentTaxVatId,
+    proponentPercentage,
+    creditEst,
+    creditUnit,
+    implementinguser,
+    environmentalAssessmentRegistrationNo,
+    programmeProperties,
+    ...extras
+  } = overrides;
+
+  // Minimal PDF payload accepted by uploadDocument
+  // (programme.service.ts:948). The data URL layout is
+  // "data:<mime>;base64,<payload>"; getFileExtension looks the "pdf"
+  // token up in fileExtensionMap (programme.service.ts:212). The
+  // payload body itself is not validated.
+  const designDocumentDataUrl =
+    "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKCg==";
+
+  const body: Record<string, unknown> = {
+    title: title ?? `Test Programme ${suffix}`,
+    externalId: externalId ?? `TEST-EXT-${suffix}`,
+    sectoralScope: sectoralScope ?? "1",
+    sector: sector ?? "Energy",
+    startTime: startTime ?? defaultStart,
+    endTime: endTime ?? defaultEnd,
+    // programme.service.ts:2097-2107 looks each taxId up in the
+    // company table via findByTaxId; a synthetic string fails. The
+    // seeded dev stack has a PD at taxId "33333" (Org 2); tests that
+    // need multi-proponent or specific roles should override.
+    proponentTaxVatId: proponentTaxVatId ?? ["33333"],
+    proponentPercentage: proponentPercentage ?? [100],
+    article6trade: article6trade ?? true,
+    cooperativeApproachId,
+    creditEst: creditEst ?? 1000,
+    creditUnit: creditUnit ?? "tCO2e",
+    implementinguser: implementinguser ?? "e2e-implementer",
+    environmentalAssessmentRegistrationNo:
+      environmentalAssessmentRegistrationNo ?? `EAR-${suffix}`,
+    // programme.service.ts:2225-2243 rejects create on CARBON_TRANSPARENCY
+    // and CARBON_UNIFIED systems when designDocument is absent; the dev
+    // stack is CARBON_TRANSPARENCY so the guard fires. A tiny base64
+    // PDF header suffices.
+    designDocument: designDocumentDataUrl,
+    programmeProperties: {
+      estimatedProgrammeCostUSD: 10000,
+      // programme.service.ts:1926-1943 validates every location string
+      // against region.regionName (lang=en). The seeded region table in
+      // the dev stack holds Nigerian states; "Abia" is the first
+      // alphabetically and is guaranteed to exist. Passing a
+      // country-code like "NG" here fails validation.
+      geographicalLocation: ["Abia"],
+      greenHouseGasses: ["CO2"],
+      ...(programmeProperties ?? {}),
+    },
+    ...extras,
+  };
+
+  const res = await api.post("national/programme/create", body);
+  await expectOk(res, "createProgramme");
+  const raw = await api.json<any>(res);
+  const data = raw?.data ?? raw;
+  const programmeId: string =
+    data?.programmeId ?? data?.id ?? data?.programme?.programmeId;
+  return { programmeId, raw: data };
+}
+
+/**
+ * PUT /national/programme/authorize — ProgrammeApprove DTO
+ * ({ programmeId, issueAmount?, comment? }). Throws on non-2xx.
+ */
+export async function authorizeProgramme(
+  api: ApiClient,
+  programmeId: string
+): Promise<void> {
+  const res = await api.put("national/programme/authorize", { programmeId });
+  await expectOk(res, "authorizeProgramme");
+}
+
+export interface IssueCreditAction {
+  actionId: string;
+  issueCredit: number;
+}
+
+/**
+ * PUT /national/programme/issue — ProgrammeMitigationIssue DTO. The
+ * request body wraps the per-action array under `issueAmount` (see
+ * programme.mitigation.issue.ts: `issueAmount: mitigationIssueProperties[]`).
+ */
+export async function issueCredits(
+  api: ApiClient,
+  programmeId: string,
+  actions: IssueCreditAction[]
+): Promise<{ issuedAmount: number; raw: any }> {
+  const res = await api.put("national/programme/issue", {
+    programmeId,
+    issueAmount: actions,
+  });
+  await expectOk(res, "issueCredits");
+  const raw = await api.json<any>(res);
+  const data = raw?.data ?? raw;
+  const issuedAmount = actions.reduce((sum, a) => sum + a.issueCredit, 0);
+  return { issuedAmount, raw: data };
+}
+
+export interface TransferOverrides {
+  blockId: string;
+  receiverOrgId: number;
+  amount: number;
+  remarks?: string;
+}
+
+/**
+ * POST /national/creditTransactionsManagement/transfer — CreditTransferDto
+ * ({ blockId, receiverOrgId, amount }). The service returns
+ * { amount, toCompanyId, fromCompanyId } under data; `transactionId` is
+ * not part of the envelope in the current implementation so it surfaces
+ * as `undefined` unless the controller starts including one.
+ */
+export async function initiateTransfer(
+  api: ApiClient,
+  overrides: TransferOverrides
+): Promise<{ transactionId?: string; raw: any }> {
+  const body: Record<string, unknown> = {
+    blockId: overrides.blockId,
+    receiverOrgId: overrides.receiverOrgId,
+    amount: overrides.amount,
+  };
+  if (overrides.remarks !== undefined) {
+    body.remarks = overrides.remarks;
+  }
+  const res = await api.post(
+    "national/creditTransactionsManagement/transfer",
+    body
+  );
+  await expectOk(res, "initiateTransfer");
+  const raw = await api.json<any>(res);
+  const data = raw?.data ?? raw;
+  const transactionId: string | undefined =
+    data?.transactionId ?? data?.id ?? data?.txRef;
+  return { transactionId, raw: data };
+}
+
+export type CreditRetirementType =
+  | "CROSS_BORDER_TRANSACTIONS"
+  | "VOLUNTARY_CANCELLATIONS"
+  | "USE_TOWARDS_NDC"
+  | "USE_FOR_OIMP"
+  | "OMGE_CANCELLATION"
+  | "SOP_ADAPTATION";
+
+// Wire values from backend CreditRetirementTypeEnum. The DTO validates
+// against the *string values* (e.g. "Cross-Border Transactions"), not
+// the TypeScript enum keys, so we map here before POSTing.
+const RETIREMENT_TYPE_WIRE: Record<CreditRetirementType, string> = {
+  CROSS_BORDER_TRANSACTIONS: "Cross-Border Transactions",
+  VOLUNTARY_CANCELLATIONS: "Voluntary Cancellations",
+  USE_TOWARDS_NDC: "Use Towards NDC",
+  USE_FOR_OIMP: "Use For OIMP",
+  OMGE_CANCELLATION: "OMGE Cancellation",
+  SOP_ADAPTATION: "SOP Adaptation",
+};
+
+export interface PerformRetireActionOverrides {
+  blockId: string;
+  retirementType: CreditRetirementType;
+  amount: number;
+  remarks?: string;
+  country?: string;
+  organizationName?: string;
+}
+
+/**
+ * POST /national/creditTransactionsManagement/retireRequest.
+ *
+ * Phase 1 of the two-phase retirement flow: a PROJECT_DEVELOPER creates
+ * a pending retirement request against one of their credit blocks. The
+ * controller route is /retireRequest (not /performRetireAction — that
+ * route handles phase 2, approve/reject/cancel, per
+ * credit.transactions.management.controller.ts:39-64). The body mirrors
+ * CreditRetireRequestDto — requires blockId + retirementType + amount,
+ * plus country + organizationName when retirementType ===
+ * CROSS_BORDER_TRANSACTIONS (ValidateIf in credit.retire.request.dto.ts).
+ * `retirementType` accepts the TypeScript enum keys above and is
+ * wire-encoded to the backend string values.
+ *
+ * The original factory name (performRetireAction) is retained so
+ * existing imports don't break; it now targets the correct initiation
+ * route.
+ */
+export async function performRetireAction(
+  api: ApiClient,
+  overrides: PerformRetireActionOverrides
+): Promise<{ raw: any; retirementId?: string }> {
+  const body: Record<string, unknown> = {
+    blockId: overrides.blockId,
+    amount: overrides.amount,
+    retirementType: RETIREMENT_TYPE_WIRE[overrides.retirementType],
+  };
+  if (overrides.remarks !== undefined) body.remarks = overrides.remarks;
+  if (overrides.country !== undefined) body.country = overrides.country;
+  if (overrides.organizationName !== undefined) {
+    body.organizationName = overrides.organizationName;
+  }
+  const res = await api.post(
+    "national/creditTransactionsManagement/retireRequest",
+    body
+  );
+  await expectOk(res, "performRetireAction");
+  const raw = await api.json<any>(res);
+  const data = raw?.data ?? raw;
+  // createRetireRequest returns { id, amount } under data. The
+  // transactionId returned here can be fed straight into
+  // approveRetireRequest below.
+  return { raw: data, retirementId: data?.id ?? data?.transactionId };
+}
+
+/**
+ * POST /national/creditTransactionsManagement/performRetireAction —
+ * phase 2 of the retirement flow. DNA Admin accepts a pending retire
+ * request, which triggers programmeLedgerService.retirementRequestAction
+ * (programme-ledger.service.ts:756). Accept drives the ledger write that
+ * applies mapRetirementTypeToAccountType to the derived retirement
+ * block (programme-ledger.service.ts:844-872, 931-967).
+ */
+export async function approveRetireRequest(
+  api: ApiClient,
+  transactionId: string | number
+): Promise<{ raw: any }> {
+  const res = await api.post(
+    "national/creditTransactionsManagement/performRetireAction",
+    { transactionId: String(transactionId), action: "ACCEPT" }
+  );
+  await expectOk(res, "approveRetireRequest");
+  const raw = await api.json<any>(res);
+  return { raw: raw?.data ?? raw };
 }
