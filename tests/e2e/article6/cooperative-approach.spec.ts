@@ -181,6 +181,143 @@ test.describe("Cooperative Approach - Article 6.2", () => {
       const finalEntity = unwrap(await apiDna.json<any>(finalRes));
       expect(finalEntity.status).toBe("Completed");
     });
+
+    // Audit gap #11 — the new Revoked terminal state (Draft -/CMA.5 paras
+    // 20-21) was added in the Phase 6 compliance fix but never exercised
+    // as a direct Draft -> Revoked transition. Locks the happy path for
+    // an immediate revocation of a freshly-created CA.
+    test("status Draft -> Revoked direct transition persists", async ({
+      apiDna,
+    }) => {
+      const created = await createCooperativeApproach(apiDna, {
+        title: `CA Draft Revoked ${uniqueSuffix()}`,
+      });
+      const id = created.cooperativeApproachId;
+      expect(created.raw.status).toBe("Draft");
+
+      const res = await apiDna.put("national/cooperativeApproach/update", {
+        cooperativeApproachId: id,
+        status: "Revoked",
+      });
+      expect(res.status()).toBe(200);
+
+      const getRes = await apiDna.get(
+        `national/cooperativeApproach/get?id=${encodeURIComponent(id)}`
+      );
+      expect(getRes.status()).toBe(200);
+      const entity = unwrap(await apiDna.json<any>(getRes));
+      expect(entity.status).toBe("Revoked");
+    });
+
+    // Audit gap #11 — Suspended -> Revoked direct transition. Mirrors
+    // the Draft -> Revoked test for the case where an in-flight CA is
+    // paused, then revoked outright without returning to Active or
+    // Completed. Article 6 semantics permit revocation from any
+    // non-terminal prior state.
+    test("status Draft -> Active -> Suspended -> Revoked persists", async ({
+      apiDna,
+    }) => {
+      const created = await createCooperativeApproach(apiDna, {
+        title: `CA Suspended Revoked ${uniqueSuffix()}`,
+      });
+      const id = created.cooperativeApproachId;
+
+      for (const next of ["Active", "Suspended", "Revoked"] as const) {
+        const res = await apiDna.put("national/cooperativeApproach/update", {
+          cooperativeApproachId: id,
+          status: next,
+        });
+        expect(res.status()).toBe(200);
+        const entity = unwrap(await apiDna.json<any>(res));
+        expect(entity.status).toBe(next);
+      }
+
+      const finalRes = await apiDna.get(
+        `national/cooperativeApproach/get?id=${encodeURIComponent(id)}`
+      );
+      expect(finalRes.status()).toBe(200);
+      const finalEntity = unwrap(await apiDna.json<any>(finalRes));
+      expect(finalEntity.status).toBe("Revoked");
+    });
+
+    // Audit gap #12 — non-linear transition: Active -> Completed
+    // skipping Suspended. The CA lifecycle spec does not mandate
+    // Suspended as an intermediate state, so this is the intended
+    // happy path for a CA that simply concludes while active. Locks
+    // the accepted behaviour so a future regression that forces
+    // Active -> Suspended -> Completed would surface here.
+    test("status Draft -> Active -> Completed (skipping Suspended) persists", async ({
+      apiDna,
+    }) => {
+      const created = await createCooperativeApproach(apiDna, {
+        title: `CA Active Completed ${uniqueSuffix()}`,
+      });
+      const id = created.cooperativeApproachId;
+
+      for (const next of ["Active", "Completed"] as const) {
+        const res = await apiDna.put("national/cooperativeApproach/update", {
+          cooperativeApproachId: id,
+          status: next,
+        });
+        expect(res.status()).toBe(200);
+        const entity = unwrap(await apiDna.json<any>(res));
+        expect(entity.status).toBe(next);
+      }
+
+      const finalRes = await apiDna.get(
+        `national/cooperativeApproach/get?id=${encodeURIComponent(id)}`
+      );
+      expect(finalRes.status()).toBe(200);
+      const finalEntity = unwrap(await apiDna.json<any>(finalRes));
+      expect(finalEntity.status).toBe("Completed");
+    });
+
+    // Audit gap #5 — backend allows any status transition via PUT;
+    // spec says Completed is terminal per Article 6 semantics. A
+    // Completed CA that can be resurrected to Active would let a
+    // Party re-open a wound-down arrangement and issue fresh ITMOs.
+    // Expected: 400 on the reactivation attempt. Marked .fixme
+    // because cooperative-approach.service currently has no state
+    // machine — PUT /update accepts any status value.
+    test.fixme(
+      "status Completed -> Active is rejected (terminal-state guard)",
+      async ({ apiDna }) => {
+        const created = await createCooperativeApproach(apiDna, {
+          title: `CA Completed Reactivate ${uniqueSuffix()}`,
+        });
+        const id = created.cooperativeApproachId;
+
+        for (const next of ["Active", "Suspended", "Completed"] as const) {
+          const res = await apiDna.put("national/cooperativeApproach/update", {
+            cooperativeApproachId: id,
+            status: next,
+          });
+          expect(res.status()).toBe(200);
+        }
+
+        // Attempt to reactivate a Completed CA. Terminal-state guard
+        // should reject with 400. Defensive window: any 4xx counts,
+        // but the primary assertion is 400.
+        const reactivate = await apiDna.put(
+          "national/cooperativeApproach/update",
+          {
+            cooperativeApproachId: id,
+            status: "Active",
+          }
+        );
+        expect(reactivate.ok()).toBe(false);
+        expect(reactivate.status()).toBe(400);
+
+        // And the persisted status must remain Completed regardless
+        // of what the response said.
+        const getRes = await apiDna.get(
+          `national/cooperativeApproach/get?id=${encodeURIComponent(id)}`
+        );
+        expect(getRes.status()).toBe(200);
+        const entity = unwrap(await apiDna.json<any>(getRes));
+        expect(entity.status).toBe("Completed");
+      }
+    );
   });
 
   // ------------------------------------------------------------------

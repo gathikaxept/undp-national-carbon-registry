@@ -49,6 +49,13 @@ import {
   queryCooperativeApproaches,
   seedCreditBlockDirect,
   seedProgrammeDirect,
+  seedTransferrableBlock,
+  seedPendingRetirementTransactionDirect,
+  initiateTransfer,
+  performRetireAction,
+  approveRetireRequest,
+  readLedgerCreditBlock,
+  readLedgerBlocksByProject,
   uniqueSuffix,
 } from "./support/factories";
 import { createApiClient, expectOk } from "./support/api-client";
@@ -1044,6 +1051,271 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
       expect(parts[2]).toBe(vintage);
       expect(parts[parts.length - 1]).toMatch(/^\d+:\d+$/);
     });
+  });
+
+  // ------------------------------------------------------------------
+  // Service-layer sequencing + serial-lineage invariants. Covers audit
+  // gaps #3 (Revoked CA must block first-transfer at the /transfer
+  // service layer, not only at /authorize) and #18 (ITMO serial
+  // lineage through split + retire per Draft -/CMA.5 ¶132). Both
+  // tests are written as executable contracts — they run live against
+  // the backend and are marked `.fixme` only when the guarded
+  // behaviour is observably missing (citing the specific clause and
+  // gap number so a future fix can unfix the test).
+  // ------------------------------------------------------------------
+  test.describe("Service-layer sequencing and serial lineage", () => {
+    // PD company IDs verified against live /national/auth/login JWT
+    // claims in credit-transfer.spec.ts and retirement.spec.ts:
+    //   palinda+dev@xeptagon.com  -> companyId=1, PD Admin (apiPd).
+    //   palinda+dev2@xeptagon.com -> companyId=3, PD Admin (receiver).
+    const PD_COMPANY_ID = 1;
+    const RECEIVER_COMPANY_ID = 3;
+
+    /**
+     * Parse a Dec 6/CMA.4 Annex I ¶5 structured ITMO serial
+     *   `{party}-{type}-{vintage}-{activityId}-{start}:{end}`
+     * into its components. Returns null when the input does not match
+     * the 5-component layout.
+     *
+     * activityId is the only free-form component (may contain
+     * hyphens), so we anchor on the leading party / type / vintage
+     * and the trailing start:end and treat everything between as the
+     * activity id. Mirrors SerialNumberManagementService.parseItmoSerial
+     * on the backend.
+     */
+    function parseItmoSerial(
+      serial: string | null | undefined
+    ): {
+      party: string;
+      type: string;
+      vintage: string;
+      activityId: string;
+      start: number;
+      end: number;
+    } | null {
+      if (!serial) return null;
+      const match = /^([^-]+)-([^-]+)-([^-]+)-(.+)-(\d+):(\d+)$/.exec(serial);
+      if (!match) return null;
+      return {
+        party: match[1],
+        type: match[2],
+        vintage: match[3],
+        activityId: match[4],
+        start: Number(match[5]),
+        end: Number(match[6]),
+      };
+    }
+
+    /**
+     * True when child's (party, type, vintage, activityId) match the
+     * parent and child's [start, end] is a (non-strict) sub-range of
+     * the parent's [start, end]. Used to validate serial lineage
+     * without locking the exact split boundaries — registry is free
+     * to pick any split point as long as the child is a sub-range
+     * of the parent per Draft -/CMA.5 ¶132.
+     */
+    function isSerialSubRange(parent: string, child: string): boolean {
+      const p = parseItmoSerial(parent);
+      const c = parseItmoSerial(child);
+      if (!p || !c) return false;
+      if (p.party !== c.party) return false;
+      if (p.type !== c.type) return false;
+      if (p.vintage !== c.vintage) return false;
+      if (p.activityId !== c.activityId) return false;
+      return c.start >= p.start && c.end <= p.end && c.start <= c.end;
+    }
+
+    test.fixme(
+      "POST /creditTransactionsManagement/transfer rejects first-transfer under a Revoked CA (Draft -/CMA.5 paras 20-21)",
+      async ({ apiPd, apiDna }) => {
+        // Audit gap #3 Critical — the Revoked-CA guard only exists on
+        // /programme/authorize (programme.service.ts:6435). The
+        // /transfer service layer
+        // (credit-transactions-management.service.ts:57-179) walks
+        // sender/receiver/block/ownership/balance checks but never
+        // re-reads the linked CA's status, so a first-transfer
+        // initiated *after* the CA is Revoked still goes through.
+        // Draft -/CMA.5 ¶21 says "no further ITMOs shall be first
+        // transferred" after revocation — this test locks the
+        // intended 400 contract so the fix can unfix.
+
+        // Arrange: CA + submitted IR + authorized programme linkage,
+        // plus a 1000-credit Holding block owned by the PD that sits
+        // behind the CA. The block must exist in both the RDBMS and
+        // the ledger (transferCredits reads from the ledger), so we
+        // use seedTransferrableBlock.
+        const ca = await createCooperativeApproach(apiDna, {
+          title: `Revoked Transfer Guard ${uniqueSuffix()}`,
+        });
+        const gen = await generateInitialReport(apiDna, {
+          cooperativeApproachId: ca.cooperativeApproachId,
+        });
+        await submitInitialReport(apiDna, gen.reportId);
+        const seeded = seedTransferrableBlock({
+          ownerCompanyId: PD_COMPANY_ID,
+          creditAmount: 1000,
+          accountType: "Holding",
+          authorizationPurpose: "UseTowardsNDC",
+          cooperativeApproachId: ca.cooperativeApproachId,
+        });
+
+        // Flip the CA to Revoked. The service accepts any status on
+        // /update (no state machine today — see audit gap #5), so
+        // this succeeds.
+        const revokeRes = await apiDna.put(
+          "national/cooperativeApproach/update",
+          {
+            cooperativeApproachId: ca.cooperativeApproachId,
+            status: "Revoked",
+          }
+        );
+        await expectOk(revokeRes, "revoke CA");
+
+        // Act: attempt first-transfer of 100 credits. The guard
+        // should reject this with 400 citing ¶21.
+        const res = await apiPd.post(
+          "national/creditTransactionsManagement/transfer",
+          {
+            blockId: seeded.creditBlockId,
+            receiverOrgId: RECEIVER_COMPANY_ID,
+            amount: 100,
+          }
+        );
+
+        // Assert: 400 (intended contract). Audit gap #3 — currently
+        // returns 200 because no Revoked-CA guard exists at the
+        // /transfer service layer.
+        expect(res.ok()).toBe(false);
+        expect(res.status()).toBe(400);
+
+        // And the ledger block balance must be untouched (no partial
+        // ownership flip recorded).
+        const ledgerBlock = readLedgerCreditBlock(seeded.creditBlockId);
+        expect(ledgerBlock).not.toBeNull();
+        expect(Number(ledgerBlock!.ownerCompanyId)).toBe(PD_COMPANY_ID);
+        expect(Number(ledgerBlock!.creditAmount)).toBe(1000);
+      }
+    );
+
+    test.fixme(
+      "ITMO serial lineage is preserved across split (transfer) + retire (Draft -/CMA.5 para 132)",
+      async ({ apiPd, apiDna }) => {
+        // Audit gap #18 Major — Draft -/CMA.5 ¶132 requires "each
+        // ITMO has a unique serial number that shall remain stable
+        // throughout its lifecycle". The registry's split-not-mutate
+        // pattern should satisfy this if derived blocks carry
+        // serials that parse as sub-ranges of the parent.
+        //
+        // Observed behaviour (credit-blocks-management.service.ts
+        // :57-103, :123-169): transferCreditAmountFromBlocks does NOT
+        // propagate itmoSerial onto either the updated parent or the
+        // newly-inserted child when splitting. Only the internal
+        // serialNumber is split (via
+        // SerialNumberManagementService.splitCreditBlockSerialNumber).
+        // The downstream ledger row therefore surfaces with
+        // itmoSerial=undefined on the child. Because the test asserts
+        // a parseable sub-range on both children, it fails today and
+        // is `.fixme` until the split helper round-trips itmoSerial.
+        //
+        // Retirement (programme-ledger.service.ts:936) DOES propagate
+        // itmoSerial onto the derived retirement block, so once the
+        // split-time propagation lands the retire-from-child branch
+        // should satisfy the sub-range assertion automatically.
+
+        // Arrange: 1000-credit block with a structured parent serial.
+        const party = "LK";
+        const itmoType = "REDUCTION";
+        const vintage = "2026";
+        const activityId = `DEMO-ACT-${uniqueSuffix()}`;
+        const start = 1;
+        const end = 1000;
+        const parentSerial = `${party}-${itmoType}-${vintage}-${activityId}-${start}:${end}`;
+
+        const seeded = seedTransferrableBlock({
+          ownerCompanyId: PD_COMPANY_ID,
+          creditAmount: 1000,
+          accountType: "Holding",
+          authorizationPurpose: "UseTowardsNDC",
+          itmoSerial: parentSerial,
+        });
+
+        // Sanity: parent parses cleanly.
+        const parsedParent = parseItmoSerial(parentSerial);
+        expect(parsedParent).not.toBeNull();
+        expect(parsedParent!.party).toBe(party);
+        expect(parsedParent!.start).toBe(start);
+        expect(parsedParent!.end).toBe(end);
+
+        // Act 1: split via transfer — move 400/1000 to another
+        // company. This triggers the split branch of
+        // transferCreditAmountFromBlocks (the other 600 stays with
+        // the sender; a brand-new block is created for the 400).
+        await initiateTransfer(apiPd, {
+          blockId: seeded.creditBlockId,
+          receiverOrgId: RECEIVER_COMPANY_ID,
+          amount: 400,
+        });
+
+        // Assert 1: two ledger blocks share the project; both
+        // itmoSerials parse AND sit inside the parent's [start, end]
+        // range. The sender's retained block should still be owned
+        // by PD_COMPANY_ID; the transferred child by
+        // RECEIVER_COMPANY_ID.
+        const blocksAfterSplit = readLedgerBlocksByProject(seeded.projectRefId);
+        const senderChild = blocksAfterSplit.find(
+          (b) => Number(b.ownerCompanyId) === PD_COMPANY_ID
+        );
+        const receiverChild = blocksAfterSplit.find(
+          (b) => Number(b.ownerCompanyId) === RECEIVER_COMPANY_ID
+        );
+        expect(senderChild, "sender-retained split block not found").toBeTruthy();
+        expect(receiverChild, "transfer-split child not found").toBeTruthy();
+        expect(
+          isSerialSubRange(parentSerial, senderChild!.itmoSerial),
+          `sender child serial ${senderChild!.itmoSerial} not a sub-range of ${parentSerial}`
+        ).toBe(true);
+        expect(
+          isSerialSubRange(parentSerial, receiverChild!.itmoSerial),
+          `receiver child serial ${receiverChild!.itmoSerial} not a sub-range of ${parentSerial}`
+        ).toBe(true);
+
+        // Act 2: retire 200 from the sender's retained block
+        // (600 balance). This exercises the retire-with-split branch
+        // at programme-ledger.service.ts:874-937 which DOES propagate
+        // itmoSerial (:936).
+        const retainedBlockId = String(senderChild!.creditBlockId);
+        const { retirementId } = await performRetireAction(apiPd, {
+          blockId: retainedBlockId,
+          retirementType: "VOLUNTARY_CANCELLATIONS",
+          amount: 200,
+        });
+        expect(retirementId).toBeTruthy();
+
+        seedPendingRetirementTransactionDirect({
+          transactionId: String(retirementId),
+          creditBlockId: retainedBlockId,
+          projectRefId: seeded.projectRefId,
+          senderCompanyId: PD_COMPANY_ID,
+          amount: 200,
+          retirementType: "Voluntary Cancellations",
+        });
+        await approveRetireRequest(apiDna, String(retirementId));
+
+        // Assert 2: the derived retirement block's serial is still a
+        // sub-range of the original parent, proving the lineage
+        // survived BOTH operations.
+        const blocksAfterRetire = readLedgerBlocksByProject(seeded.projectRefId);
+        const retiredBlock = blocksAfterRetire.find(
+          (b) => Number(b.ownerCompanyId) === 0
+        );
+        expect(retiredBlock, "retired block not found").toBeTruthy();
+        expect(Number(retiredBlock!.creditAmount)).toBe(200);
+        expect(
+          isSerialSubRange(parentSerial, retiredBlock!.itmoSerial),
+          `retired block serial ${retiredBlock!.itmoSerial} not a sub-range of ${parentSerial}`
+        ).toBe(true);
+      }
+    );
   });
 
   // ------------------------------------------------------------------
