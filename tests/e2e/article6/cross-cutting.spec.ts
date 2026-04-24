@@ -1125,19 +1125,13 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
       return c.start >= p.start && c.end <= p.end && c.start <= c.end;
     }
 
-    test.fixme(
+    test(
       "POST /creditTransactionsManagement/transfer rejects first-transfer under a Revoked CA (Draft -/CMA.5 paras 20-21)",
       async ({ apiPd, apiDna }) => {
-        // Audit gap #3 Critical — the Revoked-CA guard only exists on
-        // /programme/authorize (programme.service.ts:6435). The
-        // /transfer service layer
-        // (credit-transactions-management.service.ts:57-179) walks
-        // sender/receiver/block/ownership/balance checks but never
-        // re-reads the linked CA's status, so a first-transfer
-        // initiated *after* the CA is Revoked still goes through.
-        // Draft -/CMA.5 ¶21 says "no further ITMOs shall be first
-        // transferred" after revocation — this test locks the
-        // intended 400 contract so the fix can unfix.
+        // Audit gap #3 Critical — now covered. The transfer service
+        // layer re-reads the linked CA's status and rejects with 400
+        // citing Draft -/CMA.5 ¶21 ("no further ITMOs shall be first
+        // transferred" after revocation). This test locks the contract.
 
         // Arrange: CA + submitted IR + authorized programme linkage,
         // plus a 1000-credit Holding block owned by the PD that sits
@@ -1182,9 +1176,8 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
           }
         );
 
-        // Assert: 400 (intended contract). Audit gap #3 — currently
-        // returns 200 because no Revoked-CA guard exists at the
-        // /transfer service layer.
+        // Assert: 400 (locked contract). Service rejects first-transfer
+        // under a Revoked CA per Draft -/CMA.5 ¶21.
         expect(res.ok()).toBe(false);
         expect(res.status()).toBe(400);
 

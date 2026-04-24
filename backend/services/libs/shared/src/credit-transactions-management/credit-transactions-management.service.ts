@@ -32,6 +32,8 @@ import { BasicResponseDto } from "../dto/basic.response.dto";
 import { AefReportManagementService } from "../aef-report-management/aef-report-management.service";
 import { Role } from "../casl/role.enum";
 import { CompanyState } from "../enum/company.state.enum";
+import { CooperativeApproach } from "../entities/cooperative.approach.entity";
+import { CooperativeApproachStatus } from "../enum/cooperative.approach.status.enum";
 
 @Injectable()
 export class CreditTransactionsManagementService {
@@ -51,7 +53,12 @@ export class CreditTransactionsManagementService {
     private creditBlockTransfersViewEntityRepository: Repository<CreditBlockTransfersViewEntity>,
     @InjectRepository(CreditBlockRetirementsViewEntity)
     private creditBlockRetirementsViewEntityRepository: Repository<CreditBlockRetirementsViewEntity>,
-    private readonly aefReportManagementService: AefReportManagementService
+    private readonly aefReportManagementService: AefReportManagementService,
+    // Draft -/CMA.5 paras 20-21 guard: refuse /transfer when the block's
+    // linked cooperative approach has been revoked. Mirrors the
+    // authorizeProgramme guard in programme.service.ts.
+    @InjectRepository(CooperativeApproach)
+    private cooperativeApproachRepo: Repository<CooperativeApproach>
   ) {}
 
   public async transferCredits(
@@ -112,6 +119,15 @@ export class CreditTransactionsManagementService {
           HttpStatus.BAD_REQUEST
         );
       }
+      // Article 6.2 semantics: sender != receiver. Without this guard the
+      // ledger silently flips ownerCompanyId to itself and emits a
+      // spurious AEF row / CA-ADJ double-count.
+      if (Number(companyId) === Number(creditTransferDto.receiverOrgId)) {
+        throw new HttpException(
+          "Cannot transfer credits to the same company (receiverOrgId equals senderCompanyId).",
+          HttpStatus.BAD_REQUEST
+        );
+      }
       const creditBlock = await this.creditBlocksEntityRepository.findOne({
         where: { creditBlockId: creditTransferDto.blockId },
       });
@@ -144,6 +160,24 @@ export class CreditTransactionsManagementService {
           ),
           HttpStatus.BAD_REQUEST
         );
+      }
+      // Draft -/CMA.5 para 21: "no further ITMOs shall be first
+      // transferred" after a CA is revoked. Mirrors the authorizeProgramme
+      // guard (programme.service.ts :6435). Pre-Article-6 blocks without
+      // a cooperativeApproachId skip this check silently — no CA, no
+      // revocation state to enforce.
+      if (creditBlock.cooperativeApproachId) {
+        const ca = await this.cooperativeApproachRepo.findOne({
+          where: {
+            cooperativeApproachId: creditBlock.cooperativeApproachId,
+          },
+        });
+        if (ca && ca.status === CooperativeApproachStatus.REVOKED) {
+          throw new HttpException(
+            `Cooperative approach ${creditBlock.cooperativeApproachId} has been revoked; ITMO transfers are no longer permitted (Draft -/CMA.5 para 21).`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
       }
       await this.programmeLedgerService.transferCredits(
         creditTransferDto,

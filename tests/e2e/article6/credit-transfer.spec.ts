@@ -211,43 +211,17 @@ test.describe("Credit transfer - POST /national/creditTransactionsManagement/tra
   });
 
   // ------------------------------------------------------------------
-  // Gap #8 Major — transfer-to-self. The service has no explicit
-  // same-company guard today (readers can diff
-  // credit-transactions-management.service.ts:57-179 against gap #8 to
-  // confirm). The Article 6 intent is "sender != receiver", so this
-  // test locks the intended behaviour: 400.
-  //
-  // If the current backend silently accepts self-transfer, this test
-  // fails with a meaningful diff (status 200 vs expected 400) — which
-  // is the whole point of the audit. That is preferable to masking the
-  // gap with `.fixme`; keeping the test live surfaces the regression
-  // window in CI.
+  // Gap #8 Major — transfer-to-self. Now covered: the service
+  // rejects self-transfers with 400 citing same-company. Per Article 6
+  // semantics a PD must not be able to "transfer" credits to its own
+  // company (no ownership flip, but a spurious AEF row and a CA-ADJ
+  // double-count).
   // ------------------------------------------------------------------
-  test.fixme(
+  test(
     "transfer-to-self (sender companyId === receiverOrgId) is rejected with 400",
     async ({ apiPd }) => {
-      // Audit gap #8 Major. Per Article 6 semantics a PD must not be
-      // able to "transfer" credits to its own company (no ownership
-      // flip, but a spurious AEF row and a CA-ADJ double-count). The
-      // current service (credit-transactions-management.service.ts
-      // :57-179) performs:
-      //   - sender-must-be-PD-Admin check,
-      //   - receiver-exists check,
-      //   - receiver-is-PD check,
-      //   - receiver-is-ACTIVE check,
-      //   - block-exists check,
-      //   - block-owned-by-sender check,
-      //   - sufficient-balance check,
-      // and then calls programmeLedgerService.transferCredits. None of
-      // those guards tests `user.companyId === receiverOrgId`. Probing
-      // the endpoint with seedTransferrableBlock confirmed the flow
-      // reaches the ledger and mutates ownerCompanyId to itself,
-      // returning 200 — this is the observable bug the audit flags.
-      //
-      // Shape of the test once a self-transfer guard lands:
-      //   1. seedTransferrableBlock(owner=SENDER).
-      //   2. POST /transfer with receiverOrgId = SENDER_COMPANY_ID.
-      //   3. expect(res.status()).toBe(400).
+      // Audit gap #8 Major — locked contract: self-transfer rejected
+      // with 400.
       const seeded = seedTransferrableBlock({
         ownerCompanyId: SENDER_COMPANY_ID,
         creditAmount: 500,
