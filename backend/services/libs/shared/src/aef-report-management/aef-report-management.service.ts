@@ -95,6 +95,15 @@ export class AefReportManagementService {
     if (!project) {
       return;
     }
+    // AEF Actions/Holdings rows are only meaningful for authorized
+    // projects (Dec 4/CMA.6 Annex II: authorization is the root of the
+    // ITMO lifecycle the AEF describes). A project with no
+    // projectAuthorizationTime is either a draft that shouldn't be
+    // reported yet or a test fixture seeded out of band. Skip rather
+    // than crashing the replicator on a NOT NULL constraint.
+    if (!project.projectAuthorizationTime) {
+      return;
+    }
     // Dec 2/CMA.3 Annex para 1(a) + Dec 4/CMA.6 Annex II Actions table:
     // a transfer is the "first transfer" of a block iff the block was
     // not yet transferred at the moment the transfer began. The pre-
@@ -111,7 +120,15 @@ export class AefReportManagementService {
       ),
       creditBlockEndId: this.serialNumberManagementService.getBlockEndId(creditBlock.serialNumber),
       creditAmount: creditBlock.creditAmount,
-      vintage: this.serialNumberManagementService.getVintage(creditBlock.serialNumber),
+      // Vintage is authoritative on the CreditBlocksEntity column; the
+      // serial-number parse is a fallback for legacy rows that lost the
+      // direct field. Prefer entity, fall back to serial parse. Prevents
+      // a NOT NULL violation when the serial isn't in the canonical
+      // `CRED-{party}-{firstParty}-{project}-{start}-{end}-{vintage}`
+      // format (e.g., fixture-seeded ledger events).
+      vintage:
+        creditBlock.vintage ??
+        this.serialNumberManagementService.getVintage(creditBlock.serialNumber),
       sector: project.sector,
       sectoralScope: project.sectoralScope,
       projectAuthorizationTime: project.projectAuthorizationTime,
