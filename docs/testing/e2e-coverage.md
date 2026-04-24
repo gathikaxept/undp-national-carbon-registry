@@ -132,7 +132,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Reject pending transfer | 🔧 | `credit-transfer.spec.ts:308` | Fixme: same blocker as Approve — no `/reject` route. |
 | Cancel own pending transfer | ❌ | — | No `/cancel` route; sender has no rollback path once the synchronous transfer has committed. |
 | Partial transfer (split block) | ❌ | — | |
-| Transfer-to-self | 🔧 | `credit-transfer.spec.ts:226` | **Gap #8 Major.** Backend currently accepts self-transfer (probed: returns 200, silent ownership swap to same company). Service has no `sender === receiver` guard; test locks intended 400 contract. |
+| Transfer-to-self | ✅ | `credit-transfer.spec.ts:226` | **Gap #8 Major — now covered.** Service rejects with 400 when `user.companyId === receiverOrgId`. |
 | Transfer more than owned (overdraw) | ✅ | `credit-transfer.spec.ts:171` | **Gap #7 Major.** Service guard at credit-transactions-management.service.ts:136-147 returns 400 "notEnoughCreditAmount"; test additionally verifies balance unchanged via queryBalance. |
 | queryTransfers visibility round-trip | 🔧 | `credit-transfer.spec.ts:116` | Fixme: credit_transactions_entity is populated by the ledger-replicator container, which is optional in the dev stack and Exited in local development. |
 | UI: Transfer action button from Credit Balance | ❌ | — | |
@@ -144,7 +144,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | First-transfer tagging via replicator pre-vs-post state | ✅ | `itmo-lifecycle.spec.ts:395` | Verifies `isFirstTransfer=true` on first outgoing, false after. |
 | Query returns `isFirstTransfer` + AccountType fields | ✅ | `:322` | Shape only. |
 | First transfer under Revoked CA (blocked at authorize layer) | ✅ | `cross-cutting:677` | Reuses authorize guard. |
-| First transfer under Revoked CA at **service** layer (`/transfer`) | 🔧 | `cross-cutting:1128` | **Gap #3 Critical (fixme).** Draft -/CMA.5 ¶21 requires the `/transfer` service to refuse first-transfer after CA revocation. Probed against credit-transactions-management.service.ts:57-179 — no Revoked-CA guard exists; the call returns 200 and mutates ownership. Test locks the intended 400 contract. |
+| First transfer under Revoked CA at **service** layer (`/transfer`) | ✅ | `cross-cutting:1128` | **Gap #3 Critical — now covered.** Service rejects first-transfer with 400 citing Draft -/CMA.5 ¶21 when the block's linked CA has status REVOKED. Ledger block balance untouched. |
 | **AEF Actions row content after first transfer** | ❌ | — | The doc claims row-content assertions; enumeration finds shape-only tests. |
 | **Acquisition (inbound)** | ❌ | — | No service produces `ACQUIRED` rows; no test covers the flow, which is a known registry gap. |
 | Transfer from a fully-transferred block | ❌ | — | Overdraw case. |
@@ -282,11 +282,11 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
    **Blocker (approve/reject/cancel)**: no `/creditTransactionsManagement/approve|reject|cancel` routes exist (controller exposes only transfer, retireRequest, performRetireAction, queryBalance, queryTransfers, queryRetirements). The synchronous transfer flow commits ownership at initiate time; there is no pending-state state machine to drive. Unfix the approve/reject tests once such a two-phase flow lands.
    **Blocker (queryTransfers visibility)**: credit_transactions_entity is populated by the ledger-replicator container. When the container is stopped in local dev the assertion times out at 15s; test is `.fixme` until the replicator joins the required test-stack set.
 
-3. **Flow**: First outbound transfer under a Revoked CA. **Status**: 🔧 fixme (`cross-cutting.spec.ts:1128`).
+3. **Flow**: First outbound transfer under a Revoked CA. **Status**: ✅ covered (`cross-cutting.spec.ts:1128`).
    **Edge case**: attempt to first-transfer credits from a block whose programme's CA was Revoked after the block was issued.
-   **Why it matters**: Draft -/CMA.5 ¶21 requires this to be blocked. The current Revoked-guard is on *authorization* only (tested at cross-cutting:677), not on first-transfer at the service layer. Post-revocation first-transfer is an open TER compliance risk.
+   **Why it matters**: Draft -/CMA.5 ¶21 requires this to be blocked. The authorize-layer guard (cross-cutting:677) is now mirrored at the `/transfer` service layer.
    **Severity**: Critical.
-   **Suggested test**: create CA + submitted IR + transferrable block, flip CA to Revoked via `PUT /cooperativeApproach/update`, then POST `/creditTransactionsManagement/transfer` and assert 400. Written; `.fixme` because credit-transactions-management.service.ts:57-179 walks sender/receiver/block/ownership/balance checks but never re-reads the linked CA's status — transfer currently returns 200 and mutates ownership. Unfix once the service adds a Revoked-CA guard citing ¶21.
+   **Suggested test**: create CA + submitted IR + transferrable block, flip CA to Revoked via `PUT /cooperativeApproach/update`, then POST `/creditTransactionsManagement/transfer` and assert 400. Service rejects with 400 citing ¶21; ledger block balance unchanged.
 
 4. **Flow**: Inbound acquisition.
    **Edge case**: simulate a foreign-issued ITMO arriving at this registry with a preserved foreign serial.
@@ -313,10 +313,10 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
    **Severity**: Major.
    **Suggested test**: mirror of (6).
 
-8. **Flow**: Transfer-to-self. **Status**: 🔧 fixme (`credit-transfer.spec.ts:226`) — intended 400 contract written; backend currently returns 200 (probed against the live service) because `credit-transactions-management.service.ts:57-179` has no `user.companyId === receiverOrgId` guard. Unfix once the service rejects self-transfer.
+8. **Flow**: Transfer-to-self. **Status**: ✅ covered (`credit-transfer.spec.ts:226`).
    **Edge case**: sender organization equals recipient organization.
    **Severity**: Major.
-   **Suggested test**: assert 400 or no-op, whichever the spec prefers.
+   **Suggested test**: assert 400. Service now rejects when `user.companyId === receiverOrgId`.
 
 9. **Flow**: Retirement from a fully retired block. **Status**: ✅ covered (`retirement.spec.ts:231`).
    **Edge case**: second `retireRequest` on a block whose full balance is already reserved for retirement.
@@ -491,8 +491,8 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 
 1. **Issuance happy path (#1)** — `/programme/issue` requires a verified mitigation action (`projectMaterial` containing `VERIFICATION_REPORT`); no HTTP or seed path produces that shape. Unblocking this would lift 4 test.fixmes at once.
 2. **Issuance-without-CA guard (#20)** — `/authorize` guards `article6trade && !cooperativeApproachId`; `/issue` does not.
-3. **Transfer under Revoked CA (#3)** — `/transfer` performs sender/receiver/balance checks but never reads the CA status. Direct Article 6.2 non-compliance per Draft -/CMA.5 ¶21.
-4. **Transfer-to-self (#8)** — succeeds with 200 and a silent same-company ownership swap. No guard.
+3. **Transfer under Revoked CA (#3)** — ✅ FIXED. `/transfer` now reads the linked CA status and rejects first-transfer with 400 citing Draft -/CMA.5 ¶21.
+4. **Transfer-to-self (#8)** — ✅ FIXED. Service rejects with 400 when `user.companyId === receiverOrgId`.
 5. **CA state-machine (#5, #11, #12)** — `PUT /cooperativeApproach/update` accepts any transition. Completed→Active succeeds today; test pins the intended contract.
 6. **Authorize under Suspended CA (#17)** — `programme.service.ts:6435` guards REVOKED only; Suspended falls through.
 7. **Serial lineage on split (#18)** — `transferCreditAmountFromBlocks` does not propagate `itmoSerial` onto split children. Retirement path (programme-ledger.service.ts:936) already does.
