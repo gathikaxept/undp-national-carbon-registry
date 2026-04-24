@@ -1034,7 +1034,7 @@ const ProjectDetailsViewComponent = (props: any) => {
         } else if (k === "estimatedProjectCost") {
           generalInfo[text] = `${v} USD`;
         } else if (k === "independentCertifier") {
-          generalInfo[text] = `${v.join()}`;
+          generalInfo[text] = `${v?.join() ?? ""}`;
         } else if (k === "additionalDocuments") {
           generalInfo[text] = (
             <span>
