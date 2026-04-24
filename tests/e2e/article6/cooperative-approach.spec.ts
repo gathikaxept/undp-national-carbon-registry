@@ -276,10 +276,8 @@ test.describe("Cooperative Approach - Article 6.2", () => {
     // spec says Completed is terminal per Article 6 semantics. A
     // Completed CA that can be resurrected to Active would let a
     // Party re-open a wound-down arrangement and issue fresh ITMOs.
-    // Expected: 400 on the reactivation attempt. Marked .fixme
-    // because cooperative-approach.service currently has no state
-    // machine — PUT /update accepts any status value.
-    test.fixme(
+    // Expected: 400 on the reactivation attempt.
+    test(
       "status Completed -> Active is rejected (terminal-state guard)",
       async ({ apiDna }) => {
         const created = await createCooperativeApproach(apiDna, {

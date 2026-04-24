@@ -61,7 +61,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Draft → Revoked | ✅ | `cooperative-approach.spec.ts:189` | Gap #11. Direct happy-path transition from freshly-created Draft CA. |
 | Suspended → Revoked | ✅ | `cooperative-approach.spec.ts:217` | Gap #11. Draft → Active → Suspended → Revoked chain; verifies persistence via GET. |
 | Active → Completed (skipping Suspended) | ✅ | `cooperative-approach.spec.ts:249` | Gap #12. Locks non-linear happy path; CA lifecycle spec does not require Suspended as an intermediate. |
-| Completed → Active (invalid transition) | 🔧 | `cooperative-approach.spec.ts:282` | Gap #5 (fixme). Intended 400 contract written; backend has no state-machine guard — PUT /update accepts any status value. Unfix once cooperative-approach.service enforces terminal-state semantics. |
+| Completed → Active (invalid transition) | ✅ | `cooperative-approach.spec.ts:282` | Gap #5. State machine in cooperative-approach.service rejects transitions out of terminal states (Completed, Revoked) and any transition back to Draft with a 400. Persisted status remains Completed after the rejected update. |
 | Revoked CA blocks new ITMO authorization | ✅ | `cross-cutting.spec.ts:677` | The only place Revoked is exercised at all. |
 | PD cannot create | ✅ | `cooperative-approach.spec.ts:344` | 403. |
 | PD list read | ✅ | `:328` | UI-level. |
@@ -294,11 +294,11 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
    **Severity**: Critical (implementation gap becomes a test gap).
    **Suggested test**: call the acquisition endpoint once it exists; assert `CreditTransactionsEntity.type=Acquired`, AEF `actionType=acquisition`, and foreign serial preservation.
 
-5. **Flow**: Cooperative Approach invalid transition guard. **Status**: 🔧 fixme (`cooperative-approach.spec.ts:282`).
-   **Edge case**: Completed → Active via `PUT /update` should be rejected; currently the update endpoint accepts any status.
+5. **Flow**: Cooperative Approach invalid transition guard. **Status**: ✅ covered (`cooperative-approach.spec.ts:282`).
+   **Edge case**: Completed → Active via `PUT /update` rejected with 400; persisted status remains Completed.
    **Why it matters**: Completed is a terminal state; un-completing a CA would let a Party resurrect a wound-down arrangement and issue new ITMOs.
    **Severity**: Critical.
-   **Suggested test**: create CA, transition to Completed, attempt update with `status=Active`, assert 400. Test written; locked behind `.fixme` until cooperative-approach.service grows a state machine (today it accepts any status value passed through PUT /update).
+   **Suggested test**: create CA, transition to Completed, attempt update with `status=Active`, assert 400. State machine in cooperative-approach.service enforces Completed and Revoked as terminal and forbids any transition back to Draft.
 
 ### Major (non-obvious correctness or defence-in-depth)
 
@@ -492,7 +492,7 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 2. **Issuance-without-CA guard (#20)** — `/authorize` guards `article6trade && !cooperativeApproachId`; `/issue` does not.
 3. **Transfer under Revoked CA (#3)** — ✅ FIXED. `/transfer` now reads the linked CA status and rejects first-transfer with 400 citing Draft -/CMA.5 ¶21.
 4. **Transfer-to-self (#8)** — ✅ FIXED. Service rejects with 400 when `user.companyId === receiverOrgId`.
-5. **CA state-machine (#5, #11, #12)** — `PUT /cooperativeApproach/update` accepts any transition. Completed→Active succeeds today; test pins the intended contract.
+5. **CA state-machine (#5, #11, #12)** — ✅ FIXED. `PUT /cooperativeApproach/update` now enforces a state machine: Completed and Revoked are terminal (400 on any outbound transition), and nothing may revert to Draft. Same-status updates remain no-ops.
 6. **Authorize under Suspended CA (#17)** — ✅ FIXED. `programme.service.ts:6435` now rejects both REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21.
 7. **Serial lineage on split (#18)** — `transferCreditAmountFromBlocks` does not propagate `itmoSerial` onto split children. Retirement path (programme-ledger.service.ts:936) already does.
 8. **Programme create via HTTP** — writes to ledger only; RDBMS `programme` table is populated by the `ledger-replicator` container, which is not required-running in local dev. `/programme/query` cannot see freshly-created programmes without the replicator.

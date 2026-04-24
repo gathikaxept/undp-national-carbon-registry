@@ -139,7 +139,24 @@ export class CooperativeApproachService {
       approach.environmentalIntegrityAssessment =
         dto.environmentalIntegrityAssessment;
     if (dto.ndcLink !== undefined) approach.ndcLink = dto.ndcLink;
-    if (dto.status !== undefined) approach.status = dto.status;
+    if (dto.status !== undefined) {
+      const oldStatus = approach.status;
+      const newStatus = dto.status;
+      if (oldStatus !== newStatus) {
+        const isTerminalViolation =
+          oldStatus === CooperativeApproachStatus.COMPLETED ||
+          oldStatus === CooperativeApproachStatus.REVOKED;
+        const isRevertToDraft =
+          newStatus === CooperativeApproachStatus.DRAFT;
+        if (isTerminalViolation || isRevertToDraft) {
+          throw new HttpException(
+            `Invalid cooperative-approach status transition: ${oldStatus} -> ${newStatus}. Completed and Revoked are terminal; status cannot revert to Draft.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+      approach.status = newStatus;
+    }
     if (dto.authorizationDocumentUrl !== undefined)
       approach.authorizationDocumentUrl = dto.authorizationDocumentUrl;
 
