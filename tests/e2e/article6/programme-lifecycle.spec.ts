@@ -201,29 +201,14 @@ test.describe("Programme lifecycle - POST /national/programme/create", () => {
   });
 
   // ------------------------------------------------------------------
-  // Gap #17 Major: attempting to authorize under a Suspended CA should
+  // Gap #17 Major: attempting to authorize under a Suspended CA must
   // mirror the Revoked-CA contract at programme.service.ts:6435-6440.
-  // Today the service only rejects REVOKED, so a Suspended CA authorize
-  // currently succeeds (modulo the APPROVED-stage gate above) — a
-  // compliance gap. The test is written as the contract *should* hold
-  // (expect 400 citing Suspended) and wrapped in test.fixme until the
-  // symmetric guard lands.
-  //
-  // Note the gate order: the Suspended check must land BEFORE the
-  // APPROVED-stage check for this test to lock the intended semantics;
-  // otherwise the 400 comes from the state-machine gate and the
-  // Suspended guard is never exercised. Today both would 400 but for
-  // the wrong reason. When the guard ships, assert the response text
-  // cites "Suspended" explicitly.
+  // The service now rejects both REVOKED and SUSPENDED with a status-
+  // interpolated message citing Draft -/CMA.5 paras 20-21.
   // ------------------------------------------------------------------
-  test.fixme(
+  test(
     "authorizing a programme whose CA is Suspended returns 400 citing the Suspended state",
     async ({ apiDna }) => {
-      // Audit #17: no Suspended-CA authorize guard exists today; the
-      // service only rejects REVOKED (programme.service.ts:6435), so
-      // once the APPROVED transition lands this call would succeed
-      // under a paused cooperative arrangement — a direct analogue of
-      // the Draft -/CMA.5 paras 20-21 rationale for the Revoked guard.
       const ca = await createCooperativeApproach(apiDna, {
         title: `Suspended Source ${uniqueSuffix()}`,
       });

@@ -6432,9 +6432,12 @@ export class ProgrammeService {
           HttpStatus.BAD_REQUEST
         );
       }
-      if (ca.status === CooperativeApproachStatus.REVOKED) {
+      if (
+        ca.status === CooperativeApproachStatus.REVOKED ||
+        ca.status === CooperativeApproachStatus.SUSPENDED
+      ) {
         throw new HttpException(
-          `Cooperative approach ${program.cooperativeApproachId} has been revoked; new ITMO authorizations are not permitted (Draft -/CMA.5 paras 20-21).`,
+          `Cooperative approach ${program.cooperativeApproachId} is ${ca.status}; new ITMO authorizations are not permitted (Draft -/CMA.5 paras 20-21 — Suspended is a temporary pause; authorizations require an Active CA).`,
           HttpStatus.BAD_REQUEST
         );
       }

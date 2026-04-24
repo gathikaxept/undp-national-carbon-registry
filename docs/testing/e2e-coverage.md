@@ -106,7 +106,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Authorize **without** submitted IR (para 18 gate) | ✅ | `cross-cutting:616` | Returns 400 citing the clause. |
 | Authorize **with** submitted IR | ✅ | `cross-cutting:644` | Gate passes. |
 | Authorize under a Revoked CA | ✅ | `cross-cutting:677` | Rejected per Draft -/CMA.5 ¶21. |
-| Authorize under a **Suspended** CA | 🔧 | `programme-lifecycle.spec.ts:219` | **Gap #17 (fixme).** Intended 400 contract written; service currently has no SUSPENDED guard at programme.service.ts:6435 (only REVOKED). Unfix once the symmetric gate ships. |
+| Authorize under a **Suspended** CA | ✅ | `programme-lifecycle.spec.ts:209` | Gap #17. Authorize is blocked while the CA is paused; `programme.service.ts:6435` now rejects REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21. |
 | Authorize twice (idempotency) | ❌ | — | |
 | Revoke authorization | ❌ | — | If the service supports it, no test. |
 
@@ -363,11 +363,10 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Severity**: Major.
     **Suggested test**: seed 3 years of data; download ANNUAL_INFORMATION; assert sorted-ascending.
 
-17. **Flow**: Suspended-CA authorize gate. **Status**: 🔧 fixme (`programme-lifecycle.spec.ts:219`).
+17. **Flow**: Suspended-CA authorize gate. **Status**: ✅ covered (`programme-lifecycle.spec.ts:209`).
     **Edge case**: attempt to authorize a programme under a Suspended CA.
-    **Why it matters**: Suspended is a temporary pause; intuitively new authorizations should be blocked until reactivation, but no service guard enforces it.
+    **Why it matters**: Suspended is a temporary pause; new authorizations must be blocked until reactivation. `programme.service.ts:6435` now rejects REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21.
     **Severity**: Major.
-    **Suggested test**: mirror of the Revoked test at cross-cutting:677 — written but behind `.fixme`.
     **Blocker**: `authorizeProgramme` at programme.service.ts:6435 only rejects `CooperativeApproachStatus.REVOKED`. Add a symmetric check for `SUSPENDED` (and optionally `COMPLETED` / `DRAFT`) with a message citing the clause, then unfix this test.
 
 18. **Flow**: Serial-number immutability through split + retire. **Status**: 🔧 fixme (`cross-cutting.spec.ts:1200`).
@@ -494,7 +493,7 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 3. **Transfer under Revoked CA (#3)** — ✅ FIXED. `/transfer` now reads the linked CA status and rejects first-transfer with 400 citing Draft -/CMA.5 ¶21.
 4. **Transfer-to-self (#8)** — ✅ FIXED. Service rejects with 400 when `user.companyId === receiverOrgId`.
 5. **CA state-machine (#5, #11, #12)** — `PUT /cooperativeApproach/update` accepts any transition. Completed→Active succeeds today; test pins the intended contract.
-6. **Authorize under Suspended CA (#17)** — `programme.service.ts:6435` guards REVOKED only; Suspended falls through.
+6. **Authorize under Suspended CA (#17)** — ✅ FIXED. `programme.service.ts:6435` now rejects both REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21.
 7. **Serial lineage on split (#18)** — `transferCreditAmountFromBlocks` does not propagate `itmoSerial` onto split children. Retirement path (programme-ledger.service.ts:936) already does.
 8. **Programme create via HTTP** — writes to ledger only; RDBMS `programme` table is populated by the `ledger-replicator` container, which is not required-running in local dev. `/programme/query` cannot see freshly-created programmes without the replicator.
 
