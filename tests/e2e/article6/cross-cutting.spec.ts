@@ -1190,30 +1190,20 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
       }
     );
 
-    test.fixme(
+    test(
       "ITMO serial lineage is preserved across split (transfer) + retire (Draft -/CMA.5 para 132)",
       async ({ apiPd, apiDna }) => {
         // Audit gap #18 Major — Draft -/CMA.5 ¶132 requires "each
         // ITMO has a unique serial number that shall remain stable
         // throughout its lifecycle". The registry's split-not-mutate
-        // pattern should satisfy this if derived blocks carry
-        // serials that parse as sub-ranges of the parent.
+        // pattern satisfies this: derived blocks carry serials that
+        // parse as sub-ranges of the parent.
         //
-        // Observed behaviour (credit-blocks-management.service.ts
-        // :57-103, :123-169): transferCreditAmountFromBlocks does NOT
-        // propagate itmoSerial onto either the updated parent or the
-        // newly-inserted child when splitting. Only the internal
-        // serialNumber is split (via
-        // SerialNumberManagementService.splitCreditBlockSerialNumber).
-        // The downstream ledger row therefore surfaces with
-        // itmoSerial=undefined on the child. Because the test asserts
-        // a parseable sub-range on both children, it fails today and
-        // is `.fixme` until the split helper round-trips itmoSerial.
-        //
-        // Retirement (programme-ledger.service.ts:936) DOES propagate
-        // itmoSerial onto the derived retirement block, so once the
-        // split-time propagation lands the retire-from-child branch
-        // should satisfy the sub-range assertion automatically.
+        // Fix: credit-blocks-management.service.ts now derives
+        // itmoSerials on both split children (retained parent +
+        // transferred child) via sub-range derivation. Retirement
+        // (programme-ledger.service.ts:936) already propagates
+        // itmoSerial onto the derived retirement block.
 
         // Arrange: 1000-credit block with a structured parent serial.
         const party = "LK";

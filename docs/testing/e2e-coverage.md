@@ -247,7 +247,7 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 | `cooperativeApproachId` immutable via /update | ✅ | `:895` | |
 | `reportId` stable across lifecycle | ✅ | `:952` | |
 | Structured ITMO serial present on block | ✅ | `:992` | Presence; not immutability through retire/split. |
-| **Serial immutability through retire/split** | 🔧 | `cross-cutting:1200` | **Gap #18 Major (fixme).** Draft -/CMA.5 ¶132 requires stable serials through the lifecycle. Test seeds a parent with structured itmoSerial, splits via transfer, then retires via phase-1 + phase-2, and asserts both derived blocks carry serials that parse as sub-ranges of the parent. Observed behaviour: `transferCreditAmountFromBlocks` (credit-blocks-management.service.ts:57-103,123-169) does NOT propagate `itmoSerial` onto either the updated parent or the new child during split, so the first assertion fails today; retirement (programme-ledger.service.ts:936) already propagates correctly. Unfix once the split helper round-trips itmoSerial. |
+| **Serial immutability through retire/split** | ✅ | `cross-cutting:1200` | Service now propagates itmoSerial onto both split children via sub-range derivation. |
 | **No double-counting across CAs in a year** | ❌ | — | Mentioned in the coverage plan; no implementing test. |
 
 ### User / company / documents
@@ -369,11 +369,11 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Severity**: Major.
     **Blocker**: `authorizeProgramme` at programme.service.ts:6435 only rejects `CooperativeApproachStatus.REVOKED`. Add a symmetric check for `SUSPENDED` (and optionally `COMPLETED` / `DRAFT`) with a message citing the clause, then unfix this test.
 
-18. **Flow**: Serial-number immutability through split + retire. **Status**: 🔧 fixme (`cross-cutting.spec.ts:1200`).
+18. **Flow**: Serial-number immutability through split + retire. **Status**: ✅ covered (`cross-cutting.spec.ts:1193`).
     **Edge case**: transfer half of a block, retire the other half, assert both derived blocks carry serials derivable from the original `itmoSerial`.
     **Why it matters**: Draft -/CMA.5 ¶132 immutability. Only a snapshot test (at cross-cutting:999) covers presence; this test covers lineage through operations.
     **Severity**: Major.
-    **Suggested test**: seed 1000-credit block with known structured itmoSerial, transfer 400 to split, retire 200 from the sender-retained child, assert every derived ledger block carries an `itmoSerial` that parses as a sub-range of the parent (matching `party`, `type`, `vintage`, `activityId`; `[start,end]` inside the parent's). Written with a local `parseItmoSerial` + `isSerialSubRange` helper; `.fixme` because `transferCreditAmountFromBlocks` (credit-blocks-management.service.ts:57-103,123-169) does not propagate `itmoSerial` onto split children. Retirement (programme-ledger.service.ts:936) already does. Unfix once the split helper round-trips itmoSerial onto both the updated parent and the new child.
+    **Suggested test**: seed 1000-credit block with known structured itmoSerial, transfer 400 to split, retire 200 from the sender-retained child, assert every derived ledger block carries an `itmoSerial` that parses as a sub-range of the parent (matching `party`, `type`, `vintage`, `activityId`; `[start,end]` inside the parent's). `transferCreditAmountFromBlocks` (credit-blocks-management.service.ts) now derives itmoSerial sub-ranges onto both the retained parent and the transferred child; retirement (programme-ledger.service.ts:936) was already propagating itmoSerial.
 
 19. **Flow**: Programme-create → authorize roundtrip. **Status**: ⚠ partial — create leg ✅ at `programme-lifecycle.spec.ts:69`; state-machine pre-Approved guard ✅ at `:174`; full authorize roundtrip 🔧 fixme at `:121`.
     **Edge case**: create programme via `/programme/create` (not SQL seed), link CA, submit IR, authorize, assert programme visible with `currentStage=Authorised` via the query view.
@@ -494,7 +494,7 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 4. **Transfer-to-self (#8)** — ✅ FIXED. Service rejects with 400 when `user.companyId === receiverOrgId`.
 5. **CA state-machine (#5, #11, #12)** — ✅ FIXED. `PUT /cooperativeApproach/update` now enforces a state machine: Completed and Revoked are terminal (400 on any outbound transition), and nothing may revert to Draft. Same-status updates remain no-ops.
 6. **Authorize under Suspended CA (#17)** — ✅ FIXED. `programme.service.ts:6435` now rejects both REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21.
-7. **Serial lineage on split (#18)** — `transferCreditAmountFromBlocks` does not propagate `itmoSerial` onto split children. Retirement path (programme-ledger.service.ts:936) already does.
+7. **Serial lineage on split (#18)** — ✅ FIXED. `transferCreditAmountFromBlocks` now derives itmoSerial sub-ranges onto both split children (retained parent + transferred child). Retirement path (programme-ledger.service.ts:936) already did.
 8. **Programme create via HTTP** — writes to ledger only; RDBMS `programme` table is populated by the `ledger-replicator` container, which is not required-running in local dev. `/programme/query` cannot see freshly-created programmes without the replicator.
 
 ### What wasn't done in this pass
