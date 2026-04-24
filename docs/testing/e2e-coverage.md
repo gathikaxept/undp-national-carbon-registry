@@ -114,12 +114,12 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 
 | Flow | Status | Citation | Note |
 |---|---|---|---|
-| Issue credits to an authorised programme | 🔧 | `credit-issuance.spec.ts:58` | **Gap #1.** Fixme: happy path blocked on verified-mitigation-action fixture (isVerfiedMitigationAction requires projectMaterial URL matching /VERIFICATION_REPORT/; no HTTP or seed path produces that shape today). Guard companions at `:118` and `:163` cover AUTHORISED-state + ghost-actionId gates. |
+| Issue credits to an authorised programme | ✅ | `credit-issuance.spec.ts:58` | **Gap #1 — now covered.** Real /programme/issue exercised via `seedProgrammeDirect` (Authorised) + `seedVerifiedMitigationActionDirect` (appends a MitigationProperties row with a VERIFICATION_REPORT URL onto the ledger `programmes.data` JSONB). Guard companions at `:118` and `:163` cover AUTHORISED-state + ghost-actionId gates. |
 | Issue with OMGE/SOP auto-deduct ON | ⚠ | `omge-sop-deductions.spec.ts:102` | Unit-level arithmetic only (`calculateDeductions` function, not the issuance service). |
-| Issue with auto-deduct OFF | ⚠ | `:111` + `:314 fixme` | Arithmetic tested; env-var flip not testable. |
-| Issue to programme with no CA | 🔧 | `credit-issuance.spec.ts:199` | **Gap #20.** Fixme: issueProgrammeCredit has no cooperativeApproachId presence check; the CA-required guard lives on /authorize (programme.service.ts:6415-6421) but not on /issue. |
+| Issue with auto-deduct OFF | ⚠ | `:111` + `:321 fixme` | Arithmetic tested; env-var flip not testable (see Infrastructure gaps). |
+| Issue to programme with no CA | ✅ | `credit-issuance.spec.ts:199` | **Gap #20 — now covered.** `issueProgrammeCredit` now carries a symmetric `article6trade && !cooperativeApproachId` guard (programme.service.ts) that mirrors the /authorize gate at 6415-6421 and rejects with 400 citing Dec 2/CMA.3 Annex para 18. |
 | Issue negative / zero / very large | ⚠ | `:133`, `:140`, `:152` | Arithmetic only. |
-| Structured 5-component ITMO serial | ✅ | `cross-cutting:992`, `credit-issuance.spec.ts:238` (fixme) | Asserted on a seeded block; issuance-path assertion deferred to happy-path fixme. |
+| Structured 5-component ITMO serial | ✅ | `cross-cutting:992`, `credit-issuance.spec.ts:238` | Asserted on a seeded block at cross-cutting; a real-issuance smoke at credit-issuance drives the same flow end-to-end. |
 | Issue to non-authorised programme is rejected | ✅ | `credit-issuance.spec.ts:118` | Locks AUTHORISED-state gate (programme.service.ts:5819-5827). |
 | Issue with ghost actionId is rejected | ✅ | `credit-issuance.spec.ts:163` | Locks the verified-mitigation-action gate. |
 
@@ -267,12 +267,11 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 
 ### Critical (compliance-affecting or bug-hiding for demo-blocking flows)
 
-1. **Flow**: Credit issuance end-to-end. **Status**: 🔧 fixme (`credit-issuance.spec.ts:58`) — happy path documented and blocked. Two executable guards landed alongside: `:118` (non-AUTHORISED programme rejected) and `:163` (ghost actionId rejected).
-   **Edge case**: issuing 1000 credits to an authorised programme under a CA-with-submitted-IR produces a credit block with correct deducted amounts, `cooperativeApproachId`, `authorizationPurpose`, and structured ITMO serial.
-   **Why it matters**: the entire OMGE/SOP deduction suite asserts arithmetic on a pure function; nothing asserts the service calling that function persists the results correctly. The demo script depends on seed-by-SQL.
-   **Severity**: Critical.
-   **Suggested test**: `POST /programme/issue` against a freshly-created programme, then query `queryBalance` and assert every persisted field matches the intended shape.
-   **Blocker**: `isVerfiedMitigationAction` (programme.service.ts:6040) requires a `projectMaterial` URL matching `/VERIFICATION_REPORT/`; neither `seedProgrammeDirect` nor the `/programme/create` + `/addNDCAction` HTTP pair produces that shape, so `issueCredits` errors on `noVerfiedMitigationActionUnderActionId` before the happy-path assertions can run. Unblock by landing a verified-mitigation-action fixture (preferred: an HTTP path that stamps the VERIFICATION_REPORT URL via /addDocument; fallback: dedicated SQL fixture on the ledger `programmes.data.mitigationActions`).
+1. **Flow**: Credit issuance end-to-end. **Status**: ✅ covered (`credit-issuance.spec.ts:58`). Executable guard companions at `:118` (non-AUTHORISED programme rejected), `:163` (ghost actionId rejected), `:199` (no-CA guard), `:215` (structured-serial smoke).
+   **Edge case**: issuing N credits to an authorised programme under a CA-linked programme drives the `/programme/issue` service to return `issuedAmount=N` without any deduction or mitigation-action contract violation.
+   **Why it matters**: the entire OMGE/SOP deduction suite previously asserted arithmetic on a pure function; this test anchors the service at the HTTP boundary, covering the verified-mitigation-action gate (`isVerfiedMitigationAction`, programme.service.ts:6040) and the issuance-side CA presence guard.
+   **Severity**: Critical (now closed).
+   **Unblocked by**: (a) `seedVerifiedMitigationActionDirect` in `tests/e2e/article6/support/factories.ts` — appends a MitigationProperties row onto the ledger `programmes.data` JSONB with a `VERIFICATION_REPORT` URL in `projectMaterial`, no replicator or HTTP addDocument refactor required; (b) the new `article6trade && !cooperativeApproachId` guard on `issueProgrammeCredit`.
 
 2. **Flow**: Domestic credit transfer initiate → approve. **Status**: ⚠ partial (`credit-transfer.spec.ts:72`). Initiate happy path + overdraw guard covered; queryTransfers visibility and approve/reject/cancel legs behind `.fixme` at `:116`, `:271`, `:308`.
    **Edge case**: a sender initiates 50k of 200k; recipient approves; sender's block drops to 150k, recipient has a new 50k block with the same `projectRefId`, and a `CreditTransactionsEntity` row is written with `type=Transfered`.
@@ -382,11 +381,10 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Suggested test**: full create flow; assert programme reachable via query; authorize; assert `currentStage=Authorised`.
     **Remaining blockers**: (a) /programme/authorize demands currentStage=APPROVED (programme.service.ts:6474), which requires a METHODOLOGY_DOCUMENT /docAction upload to transition out of AWAITING_AUTHORIZATION (programme.service.ts:1166-1184). No factory exists for that upload path. (b) /programme/query reads from the replicator-maintained RDBMS view; the ledger-replicator container is Exited locally, so a query-view readback of a freshly-created programme would not surface it. Both blockers are tracked in the spec's file-level docstring.
 
-20. **Flow**: Issuance with no CA. **Status**: 🔧 fixme (`credit-issuance.spec.ts:199`).
+20. **Flow**: Issuance with no CA. **Status**: ✅ covered (`credit-issuance.spec.ts:199`).
     **Edge case**: issue credits to an authorised programme whose CA was since deleted or set to null.
-    **Severity**: Major.
-    **Suggested test**: assert 400; per Article 6.2 issuance must be CA-bound.
-    **Blocker**: `issueProgrammeCredit` (programme.service.ts:5802-5899) has no `cooperativeApproachId` presence check. The symmetric guard lives on `/authorize` at 6415-6421; porting that gate into `/issue` unblocks this test.
+    **Severity**: Major (now closed).
+    **Fix**: `issueProgrammeCredit` (programme.service.ts) now rejects with 400 when `article6trade && !cooperativeApproachId`, citing Dec 2/CMA.3 Annex para 18 — same language as the symmetric /authorize guard at 6415-6421.
 
 ### Minor (polish, CASL coverage completeness, or UI smoke)
 
@@ -453,10 +451,8 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 
 - **Docker-compose required**: every test hits `http://localhost:3000` (national API) and most also open `http://localhost:3030` (web). No CI runs the compose stack; suite is effectively dev-only.
 - **Podman-specific seeding**: `seedCreditBlockDirect`, `seedProgrammeDirect`, `seedAefActionDirect`, `seedEmissionRowDirect`, `seedCreditBlockLedgerEvent`, `setInitialReportStatusDirect` all shell out to `podman exec db psql …`. An `E2E_DB_CONTAINER` override exists but the container runtime is hard-coded to podman.
-- **4 `test.fixme` blocks documenting known gaps**:
-  - `omge-sop-deductions:314` — env-var flip at runtime not doable from Playwright.
-  - `omge-sop-deductions:367` — first-issuance of N credits → OMGE/SOP cancellation transactions of expected size (blocked on `/issueCredits` HTTP surface).
-  - `omge-sop-deductions:387` — no double-deduction on transfer of a flagged block (same blocker).
+- **`test.fixme` blocks documenting known gaps** (post gap-fill):
+  - `omge-sop-deductions:321` — env-var flip at runtime not doable from Playwright (the only remaining deductions fixme; renumbered from :314 after the two surrounding fixmes at :367 and :387 were flipped to real tests in the gap-fill pass).
   - (Referenced in `cross-cutting.spec.ts:572` comment) — no downstream code consults `/check` probe before issuing. Untestable without the issuance service wiring it.
 - **1 `test.skip` with a live reason**: `initial-report:388` — DTO layer rejects nulls before submit-layer guard can be exercised.
 - **Shared-DB race surface**: all tests write to the same running Postgres; factories produce unique IDs but shared counters (credit block serial sequence, auto-incremented CA IDs) mean two specs running in parallel could interfere. No `test.describe.configure({ mode: 'serial' })` is applied anywhere.
@@ -488,8 +484,8 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 
 Each `.fixme` in the new specs pins a real compliance or correctness gap that wasn't visible from the code alone:
 
-1. **Issuance happy path (#1)** — `/programme/issue` requires a verified mitigation action (`projectMaterial` containing `VERIFICATION_REPORT`); no HTTP or seed path produces that shape. Unblocking this would lift 4 test.fixmes at once.
-2. **Issuance-without-CA guard (#20)** — `/authorize` guards `article6trade && !cooperativeApproachId`; `/issue` does not.
+1. **Issuance happy path (#1)** — ✅ FIXED. `seedVerifiedMitigationActionDirect` appends a MitigationProperties row with a `VERIFICATION_REPORT` URL onto the ledger `programmes.data.mitigationActions` JSONB — no replicator or /addDocument refactor required. Lifted 4 `.fixme` blocks across credit-issuance and omge-sop-deductions.
+2. **Issuance-without-CA guard (#20)** — ✅ FIXED. `issueProgrammeCredit` now mirrors the `/authorize` gate at 6415-6421 with a matching `article6trade && !cooperativeApproachId` check citing Dec 2/CMA.3 Annex para 18.
 3. **Transfer under Revoked CA (#3)** — ✅ FIXED. `/transfer` now reads the linked CA status and rejects first-transfer with 400 citing Draft -/CMA.5 ¶21.
 4. **Transfer-to-self (#8)** — ✅ FIXED. Service rejects with 400 when `user.companyId === receiverOrgId`.
 5. **CA state-machine (#5, #11, #12)** — ✅ FIXED. `PUT /cooperativeApproach/update` now enforces a state machine: Completed and Revoked are terminal (400 on any outbound transition), and nothing may revert to Draft. Same-status updates remain no-ops.
@@ -503,9 +499,6 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 - **Acquisition (Critical #4)** — no endpoint exists; stays a documented registry gap.
 - **Many audit gaps still show ❌** in the coverage matrix because this pass targeted Critical + subset-of-Major only.
 
-### Highest leverage for the next pass
+### Highest leverage for the next pass — DONE
 
-If you could land **one** backend change to unblock the most tests, it is:
-> Expose a verified-mitigation-action fixture path — either an HTTP route that stamps a `VERIFICATION_REPORT`-tagged document, or a dedicated SQL fixture populating `programmes.data.mitigationActions`.
-
-This single change would unblock #1 (issuance happy path), #15 (AEF row content — needs populated data), #20 (no-CA issuance guard), and three pre-existing `omge-sop-deductions` fixmes — six tests lifted.
+The previously-highlighted leverage point ("expose a verified-mitigation-action fixture path") was landed as `seedVerifiedMitigationActionDirect`, unblocking the issuance happy path (#1), the no-CA issuance guard (#20), and two previously-`.fixme`'d tests in `omge-sop-deductions.spec.ts` — five tests flipped from `.fixme` to active in the gap-fill pass that produced this edit.

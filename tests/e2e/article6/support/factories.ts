@@ -161,6 +161,102 @@ export function seedProgrammeDirect(input: {
 }
 
 /**
+ * Seed a verified mitigation action onto a programme directly in the
+ * ledger. Mirrors the production shape produced by
+ * `programmeLedger.addMitigation` (programme-ledger.service.ts:2364) so
+ * that `issueProgrammeCredit` sees:
+ *   - `mitigationActions[*].actionId` — referenced by the issueAmount,
+ *   - `mitigationActions[*].projectMaterial[]` — a URL list whose string
+ *     contains "VERIFICATION_REPORT" so `isVerfiedMitigationAction`
+ *     (programme.service.ts:6040) returns true,
+ *   - `mitigationActions[*].properties.availableCredits` / `.issuedCredits`
+ *     — the running totals decremented on issue.
+ *
+ * The ledger's `programmes` table is append-only and
+ * `fetchRecords` returns `DISTINCT ON (programmeId) ORDER BY hash DESC`
+ * (pgsql-ledger.service.ts:157-178), so a fresh INSERT with a higher
+ * hash wins. We read the current latest row, splice a mitigation action
+ * into `data.mitigationActions`, and INSERT the merged JSON — no
+ * HTTP or addMitigation round-trip required.
+ *
+ * The programme referenced by `programmeId` must already exist in the
+ * ledger (typically via `seedProgrammeDirect`). Returns the generated
+ * actionId (uuid) that callers can feed into `issueCredits`.
+ */
+export async function seedVerifiedMitigationActionDirect(
+  programmeId: string,
+  opts: { actionId?: string; amount?: number } = {}
+): Promise<string> {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const actionId = opts.actionId ?? `NDC-VERIFIED-${uniqueSuffix()}`;
+  const amount = opts.amount ?? 1000;
+  const verificationUrl = `https://example.com/VERIFICATION_REPORT/${actionId}.pdf`;
+
+  // 1. Read the current latest ledger row for this programmeId and pull
+  //    out the JSONB blob. We rebuild it locally so the INSERT below
+  //    carries every field forward.
+  const selectSql = `
+    SELECT data FROM (
+      SELECT DISTINCT ON (data->>'programmeId') data, hash
+      FROM programmes
+      ORDER BY data->>'programmeId', hash DESC
+    ) x WHERE data->>'programmeId' = '${programmeId}';
+  `.replace(/\s+/g, " ").trim();
+  const out = execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -t -A -c ${JSON.stringify(
+      selectSql
+    )}`,
+    { encoding: "utf8" }
+  );
+  const line = out.trim();
+  if (!line) {
+    throw new Error(
+      `seedVerifiedMitigationActionDirect: programme ${programmeId} not found in ledger`
+    );
+  }
+  const existing = JSON.parse(line) as Record<string, any>;
+
+  // 2. Build the MitigationProperties object. Required fields per the
+  //    DTO: typeOfMitigation, systemEstimatedCredits, actionId,
+  //    constantVersion. projectMaterial is a plain URL array — the
+  //    service check at programme.service.ts:6040 accepts either
+  //    `{url: string}` or a raw string, so we use the simpler raw form.
+  const newAction = {
+    typeOfMitigation: "Agriculture",
+    userEstimatedCredits: amount,
+    systemEstimatedCredits: amount,
+    actionId,
+    projectMaterial: [verificationUrl],
+    properties: {
+      issuedCredits: 0,
+      availableCredits: amount,
+    },
+    constantVersion: "1.0",
+  };
+  const merged = { ...existing };
+  const existingActions: any[] = Array.isArray(existing.mitigationActions)
+    ? existing.mitigationActions
+    : [];
+  merged.mitigationActions = [...existingActions, newAction];
+  merged.txTime = Date.now();
+
+  // 3. Append a new ledger row. The hash sequence guarantees the new
+  //    row wins the DISTINCT ON.
+  const insertSql = `
+    INSERT INTO programmes (data, meta)
+    VALUES ('${JSON.stringify(merged).replace(/'/g, "''")}'::jsonb, '{}'::jsonb);
+  `.replace(/\s+/g, " ").trim();
+  execSync(
+    `podman exec ${container} psql -U root -d carbondevEvents -c ${JSON.stringify(
+      insertSql
+    )}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+
+  return actionId;
+}
+
+/**
  * Seed an emission row for a given year + country with a totalCo2WithoutLand
  * co2eq value. Used by the Corresponding Adjustment safeguard-fail test.
  */
