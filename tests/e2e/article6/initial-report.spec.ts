@@ -715,4 +715,100 @@ test.describe("Initial Report - Article 6.2", () => {
       ).toBeVisible();
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Behavior locks - current no-guard state.
+  //
+  // Three edges where the IR service currently lacks a guard. Each test
+  // asserts the *current* (passes-through) behavior so that any future
+  // intentional guard addition surfaces here as a planned red.
+  //
+  // Contrast: programme.service.ts:6450-6458 DOES gate /authorize on
+  // CooperativeApproachStatus.REVOKED + SUSPENDED. The IR service at
+  // initial-report.service.ts has NO equivalent CA-status gate on
+  // /generate or /submit, and only locks on Published (line 184) for
+  // /update. Draft -/CMA.5 para 21 implies a Revoked-CA gate should
+  // exist; these tests document the gap explicitly.
+  // ---------------------------------------------------------------------
+  test.describe("Behavior locks - current no-guard state", () => {
+    test("POST /generate against a Revoked CA succeeds today (no guard)", async ({
+      apiDna,
+    }) => {
+      // Locks current no-guard behavior. /generate has no CA-status gate;
+      // once a Revoked-CA guard is added (Draft -/CMA.5 para 21), this
+      // test will go red and should be inverted to assert 400. See
+      // programme.service.ts:6450-6458 for the symmetric guard on
+      // /authorize that this service is missing.
+      const ca = await createCooperativeApproach(apiDna, {
+        title: `IR Lock GenRevoked ${uniqueSuffix()}`,
+      });
+      const revoke = await apiDna.put("national/cooperativeApproach/update", {
+        cooperativeApproachId: ca.cooperativeApproachId,
+        status: "Revoked",
+      });
+      expect(revoke.status()).toBe(200);
+
+      const res = await apiDna.post("national/initialReport/generate", {
+        cooperativeApproachId: ca.cooperativeApproachId,
+      });
+      expect(res.status()).toBeGreaterThanOrEqual(200);
+      expect(res.status()).toBeLessThan(300);
+      const ir = unwrap<any>(await apiDna.json<any>(res));
+      expect(ir.reportId).toMatch(/^IR-\d+$/);
+    });
+
+    test("PUT /submit on an IR for a Revoked CA succeeds today (no guard)", async ({
+      apiDna,
+    }) => {
+      // Locks current no-guard behavior. /submit has no CA-status gate.
+      // A future para 21 guard (mirroring
+      // programme.service.ts:6450-6458) would flip this red. Contrast
+      // with the IR service which has no IR-equivalent.
+      const ca = await createCooperativeApproach(apiDna, {
+        title: `IR Lock SubmitRevoked ${uniqueSuffix()}`,
+      });
+      const gen = await generateInitialReport(apiDna, {
+        cooperativeApproachId: ca.cooperativeApproachId,
+      });
+      const revoke = await apiDna.put("national/cooperativeApproach/update", {
+        cooperativeApproachId: ca.cooperativeApproachId,
+        status: "Revoked",
+      });
+      expect(revoke.status()).toBe(200);
+
+      const submitted = await submitInitialReport(apiDna, gen.reportId);
+      expect(submitted.reportId).toBe(gen.reportId);
+      expect(submitted.status).toBe("Submitted");
+    });
+
+    test("PUT /update on a Submitted IR succeeds today (no guard)", async ({
+      apiDna,
+    }) => {
+      // Locks current no-guard behavior. initial-report.service.ts:184
+      // only rejects edits when status === Published; Submitted is
+      // mutable. A future Submitted-immutability guard (audit gap #13,
+      // mirroring the /authorize CA-status gate at
+      // programme.service.ts:6450-6458) would flip this red.
+      const ca = await createCooperativeApproach(apiDna, {
+        title: `IR Lock UpdateSubmitted ${uniqueSuffix()}`,
+      });
+      const gen = await generateInitialReport(apiDna, {
+        cooperativeApproachId: ca.cooperativeApproachId,
+      });
+      const submitted = await submitInitialReport(apiDna, gen.reportId);
+      expect(submitted.status).toBe("Submitted");
+
+      const res = await apiDna.put("national/initialReport/update", {
+        reportId: gen.reportId,
+        caMethodDescription: "post-submit edit - should currently succeed",
+      });
+      expect(res.status()).toBeGreaterThanOrEqual(200);
+      expect(res.status()).toBeLessThan(300);
+      const updated = unwrap<any>(await apiDna.json<any>(res));
+      expect(updated.caMethodDescription).toBe(
+        "post-submit edit - should currently succeed"
+      );
+      expect(updated.status).toBe("Submitted");
+    });
+  });
 });

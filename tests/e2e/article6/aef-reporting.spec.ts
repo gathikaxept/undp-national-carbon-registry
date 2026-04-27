@@ -35,7 +35,15 @@
  */
 import { test, expect } from "./support/fixtures";
 import { BASE_URL } from "./support/auth";
-import { seedAefActionDirect, uniqueSuffix } from "./support/factories";
+import {
+  createCooperativeApproach,
+  generateInitialReport,
+  seedAefActionDirect,
+  seedCreditBlockDirect,
+  seedProgrammeDirect,
+  submitInitialReport,
+  uniqueSuffix,
+} from "./support/factories";
 import { expectOk } from "./support/api-client";
 
 // ---------------------------------------------------------------------
@@ -502,6 +510,194 @@ test.describe("AEF Reporting - Article 6.2", () => {
       // pinning the selected labels, since i18n may or may not be
       // loaded at render time.
       await expect(dnaPage.locator(".ant-select-multiple").first()).toBeVisible();
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Row content (gap #15) + cumulativeAmount monotonicity (gap #16).
+  // The shape-only tests above verify queryAefRecords returns the
+  // Phase 4 columns when present. These tests drive a full HTTP-driven
+  // CA + IR lifecycle (plus a direct-SQL programme + credit block + AEF
+  // row) and lock the actual content of the seeded AEF row. The
+  // queryAefRecords reducer (aef-report-management.service.ts:213-218)
+  // spreads `...record` so every entity column surfaces — including
+  // `acquiringPartyCountryCode` and `cumulativeAmount`, which the
+  // ACTIONS / ANNUAL_INFORMATION CSV path drops on the floor
+  // (prepareActionsData hand-copies a fixed set of fields and never
+  // touches those two columns).
+  // ------------------------------------------------------------------
+  test.describe("Row content + cumulativeAmount (gaps #15, #16)", () => {
+    test("AEF row content carries CA + authorization fields after a seeded lifecycle", async ({
+      apiDna,
+    }) => {
+      const suffix = uniqueSuffix();
+
+      // 1. CA via HTTP.
+      const ca = await createCooperativeApproach(apiDna, {
+        title: `Test CA Row ${suffix}`,
+      });
+
+      // 2. IR via HTTP. submitInitialReport returns the persisted IR.
+      //    Not strictly required by the AEF row content but seeded for
+      //    fidelity to the documented lifecycle.
+      const ir = await generateInitialReport(apiDna, {
+        cooperativeApproachId: ca.cooperativeApproachId,
+      });
+      await submitInitialReport(apiDna, ir.reportId);
+
+      // 3. Programme + credit block via direct SQL — there is no
+      //    cheap HTTP fixture for an Authorised programme + Holding
+      //    credit block in the running stack.
+      seedProgrammeDirect({
+        companyId: 1,
+        cooperativeApproachId: ca.cooperativeApproachId,
+        currentStage: "Authorised",
+      });
+      seedCreditBlockDirect({
+        ownerCompanyId: 1,
+        creditAmount: 1000,
+        cooperativeApproachId: ca.cooperativeApproachId,
+        authorizationPurpose: "UseTowardsNDC",
+        accountType: "Holding",
+      });
+
+      // 4. The AEF row itself. No production service writes
+      //    aef_actions_table_entity rows in the dev stack, so direct
+      //    seed is the only way to assert content end-to-end.
+      const aef = seedAefActionDirect({
+        actionType: "authorization",
+        creditAmount: 1000,
+        cooperativeApproachId: ca.cooperativeApproachId,
+        authorizationPurpose: "UseTowardsNDC",
+        isFirstTransfer: false,
+        reportingYear: 2025,
+        acquiringPartyCountryCode: "NG",
+      });
+
+      // 5. Read back via queryAefRecords filtered by the unique CA id.
+      const res = await apiDna.post(
+        "national/reportsManagement/queryAefRecords",
+        {
+          page: 1,
+          size: 500,
+          sort: { key: "createdTime", order: "DESC" },
+          filterAnd: [
+            {
+              key: "cooperativeApproachId",
+              operation: "=",
+              value: ca.cooperativeApproachId,
+            },
+          ],
+        }
+      );
+      await expectOk(res, "queryAefRecords row content");
+      const body = await apiDna.json<any>(res);
+      const data = body?.data ?? body;
+      const rows: any[] = Array.isArray(data) ? data : data?.data ?? [];
+      const row = rows.find((r: any) => r.id === aef.id);
+      expect(row).toBeTruthy();
+
+      expect(row.cooperativeApproachId).toBe(ca.cooperativeApproachId);
+      // The reducer formats actionType only — authorizationPurpose is
+      // surfaced raw via the `...record` spread.
+      expect(row.authorizationPurpose).toBe("UseTowardsNDC");
+      expect(typeof row.isFirstTransfer).toBe("boolean");
+      expect(row.isFirstTransfer).toBe(false);
+      // Nullable column: assert the seeded value lands.
+      expect(
+        row.acquiringPartyCountryCode === null ||
+          typeof row.acquiringPartyCountryCode === "string"
+      ).toBe(true);
+      expect(row.acquiringPartyCountryCode).toBe("NG");
+      // reportingYear may surface as a number or a string depending on
+      // the JSON serializer; coerce.
+      const ry =
+        typeof row.reportingYear === "number"
+          ? row.reportingYear
+          : parseInt(String(row.reportingYear), 10);
+      expect(typeof ry).toBe("number");
+      expect(ry).toBe(2025);
+    });
+
+    test("cumulativeAmount across reportingYear 2024/2025/2026 is monotonically non-decreasing (gap #16)", async ({
+      apiDna,
+    }) => {
+      const suffix = uniqueSuffix();
+      const caId = `CA-MONO-${suffix}`;
+
+      // 3 rows, strictly non-decreasing cumulativeAmount across years.
+      seedAefActionDirect({
+        actionType: "authorization",
+        cooperativeApproachId: caId,
+        reportingYear: 2024,
+        cumulativeAmount: 100,
+      });
+      seedAefActionDirect({
+        actionType: "authorization",
+        cooperativeApproachId: caId,
+        reportingYear: 2025,
+        cumulativeAmount: 250,
+      });
+      seedAefActionDirect({
+        actionType: "authorization",
+        cooperativeApproachId: caId,
+        reportingYear: 2026,
+        cumulativeAmount: 250, // equal — non-decreasing is the contract
+      });
+
+      // Smoke-test the CSV download path. The CSV itself does NOT
+      // currently include cumulativeAmount or reportingYear —
+      // prepareActionsData (aef-report-management.service.ts:328-369)
+      // hand-copies a fixed set of fields onto DataExportActions and
+      // never touches those columns. This means the real monotonicity
+      // assertion has to run against queryAefRecords (which surfaces
+      // all entity columns via `...record` spread), not the CSV. The
+      // download is still exercised here as a reachability smoke.
+      const dl = await apiDna.post(
+        "national/reportsManagement/downloadAefReport",
+        { reportType: "ANNUAL_INFORMATION", fileType: "csv" }
+      );
+      // 200/201 (file ref returned) or 400 (nothingToExport) are both
+      // acceptable depending on what other rows exist in the shared DB.
+      expect([200, 201, 400]).toContain(dl.status());
+
+      // Real assertion: query and walk by reportingYear ascending.
+      const res = await apiDna.post(
+        "national/reportsManagement/queryAefRecords",
+        {
+          page: 1,
+          size: 500,
+          sort: { key: "reportingYear", order: "ASC" },
+          filterAnd: [
+            {
+              key: "cooperativeApproachId",
+              operation: "=",
+              value: caId,
+            },
+          ],
+        }
+      );
+      await expectOk(res, "queryAefRecords for monotonicity");
+      const body = await apiDna.json<any>(res);
+      const data = body?.data ?? body;
+      const rows: any[] = Array.isArray(data) ? data : data?.data ?? [];
+      const ours = rows.filter((r: any) => r.cooperativeApproachId === caId);
+      expect(ours.length).toBe(3);
+
+      // Defensive: re-sort client-side in case the service strips the
+      // sort key (the reducer does not whitelist keys, but a future
+      // tightening could).
+      ours.sort(
+        (x: any, y: any) =>
+          Number(x.reportingYear) - Number(y.reportingYear)
+      );
+      for (let i = 1; i < ours.length; i++) {
+        const prev = Number(ours[i - 1].cumulativeAmount);
+        const cur = Number(ours[i].cumulativeAmount);
+        expect(Number.isFinite(prev)).toBe(true);
+        expect(Number.isFinite(cur)).toBe(true);
+        expect(cur).toBeGreaterThanOrEqual(prev);
+      }
     });
   });
 });
