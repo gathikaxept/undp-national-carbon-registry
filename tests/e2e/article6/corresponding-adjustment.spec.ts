@@ -48,6 +48,7 @@ import { test, expect } from "./support/fixtures";
 import { BASE_URL } from "./support/auth";
 import {
   createCooperativeApproach,
+  seedCreditTransactionDirect,
   seedEmissionRowDirect,
   uniqueSuffix,
 } from "./support/factories";
@@ -341,6 +342,53 @@ test.describe("Corresponding Adjustment - Article 6.2", () => {
       expect(res.status()).toBeGreaterThanOrEqual(400);
       expect(res.status()).toBeLessThan(500);
     });
+
+    test("year with only Acquired txns produces emissionsBalance = -acquired (sign-flip safety)", async ({
+      apiDna,
+    }) => {
+      // Direct SQL into credit_transactions_entity.
+      // corresponding-adjustment.service.ts:49-100 reads credit txns
+      // for the year window directly from the RDBMS (no replicator
+      // dependency for the read path) and aggregates by `type`. With
+      // only an `Acquired` txn:
+      //   firstTransferred = 0
+      //   acquired = N
+      //   usedTowardsNDC = 0
+      //   emissionsBalance = firstTransferred - acquired + used = -N
+      // This is the sign-flip safety case — covers gap #15a/#15b
+      // (year with only acquisitions / more acquisitions than
+      // transfers — the latter is a strict superset of the former
+      // since transfers=0 here).
+      const suffix = uniqueSuffix();
+      const caId = `CA-ACQ-${suffix}`;
+      const year = nextFutureYear();
+      const N = 750;
+
+      seedCreditTransactionDirect({
+        type: "Acquired",
+        status: "Completed",
+        amount: N,
+        year,
+        cooperativeApproachId: caId,
+      });
+
+      const res = await apiDna.post(
+        "national/correspondingAdjustment/calculate",
+        {
+          year,
+          cooperativeApproachId: caId,
+          ndcType: "SingleYear",
+          caMethod: "Trajectory",
+        }
+      );
+      await expectOk(res, "calculate (acquisitions only)");
+      const ca = unwrap<any>(await apiDna.json<any>(res));
+      expect(toNumber(ca.firstTransferredItmos)).toBe(0);
+      expect(toNumber(ca.acquiredItmos)).toBe(N);
+      expect(toNumber(ca.usedTowardsNdcItmos)).toBe(0);
+      // Para 8: 0 - N + 0 = -N.
+      expect(toNumber(ca.emissionsBalance)).toBeCloseTo(-N, 5);
+    });
   });
 
   // ------------------------------------------------------------------
@@ -490,6 +538,78 @@ test.describe("Corresponding Adjustment - Article 6.2", () => {
       );
       expect(res.ok()).toBe(false);
       expect(res.status()).toBe(404);
+    });
+
+    test("submit then add new txns: GET returns the original snapshot (frozen at calc time, gap #14)", async ({
+      apiDna,
+    }) => {
+      // Locks the current behaviour at
+      // corresponding-adjustment.service.ts:208-222 — submit() ONLY
+      // flips status to Submitted, never recalculates. Adding new
+      // transactions for the same (CA, year) AFTER submit therefore
+      // does NOT mutate the persisted snapshot. This test pins that
+      // contract; if a future commit adds a recalc-on-submit branch
+      // it will fail and force an explicit decision (snapshot vs live).
+      const suffix = uniqueSuffix();
+      const caId = `CA-STALE-${suffix}`;
+      const year = nextFutureYear();
+
+      // Pre-calc seed: one Acquired of 100.
+      seedCreditTransactionDirect({
+        type: "Acquired",
+        amount: 100,
+        year,
+        cooperativeApproachId: caId,
+        status: "Completed",
+      });
+
+      const calcRes = await apiDna.post(
+        "national/correspondingAdjustment/calculate",
+        {
+          year,
+          cooperativeApproachId: caId,
+          ndcType: "SingleYear",
+          caMethod: "Trajectory",
+        }
+      );
+      await expectOk(calcRes, "calculate baseline");
+      const baseline = unwrap<any>(await apiDna.json<any>(calcRes));
+      expect(toNumber(baseline.acquiredItmos)).toBe(100);
+      expect(baseline.status).toBe("Draft");
+
+      // submit() only flips status, no recalc — pin this contract.
+      const submitRes = await apiDna.put(
+        `national/correspondingAdjustment/submit?id=${encodeURIComponent(
+          baseline.caId
+        )}`
+      );
+      await expectOk(submitRes, "submit");
+
+      // Inject a NEW txn for the same (CA, year) AFTER submit.
+      seedCreditTransactionDirect({
+        type: "Acquired",
+        amount: 999,
+        year,
+        cooperativeApproachId: caId,
+        status: "Completed",
+      });
+
+      // GET the persisted snapshot — should still reflect the
+      // pre-submit values, NOT the live-recalc 1099.
+      const getRes = await apiDna.get(
+        `national/correspondingAdjustment/get?id=${encodeURIComponent(
+          baseline.caId
+        )}`
+      );
+      await expectOk(getRes, "get persisted CA");
+      const persisted = unwrap<any>(await apiDna.json<any>(getRes));
+
+      expect(persisted.caId).toBe(baseline.caId);
+      expect(persisted.status).toBe("Submitted");
+      // Frozen-snapshot behaviour: acquired stays at 100, not 1099.
+      expect(toNumber(persisted.acquiredItmos)).toBe(100);
+      expect(toNumber(persisted.firstTransferredItmos)).toBe(0);
+      expect(toNumber(persisted.emissionsBalance)).toBeCloseTo(-100, 5);
     });
   });
 

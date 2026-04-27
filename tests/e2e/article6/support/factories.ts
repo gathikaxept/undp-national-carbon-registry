@@ -596,6 +596,11 @@ export function seedAefActionDirect(input: {
     | "OtherInternationalMitigationPurposes"
     | "OtherPurposes";
   isFirstTransfer?: boolean;
+  // Phase 4 columns. The entity declares them
+  // (aef.actions.table.entity.ts:53,67) but no production service writes
+  // them today — direct seed is the only way to drive content tests.
+  acquiringPartyCountryCode?: string;
+  cumulativeAmount?: number;
 }): { id: number } {
   const container = process.env.E2E_DB_CONTAINER ?? "db";
   const suffix = uniqueSuffix();
@@ -612,20 +617,29 @@ export function seedAefActionDirect(input: {
     ? `'${input.authorizationPurpose}'`
     : "NULL";
   const isFirstTransfer = input.isFirstTransfer ? "TRUE" : "FALSE";
+  const acquiringPartyCountryCodeSql = input.acquiringPartyCountryCode
+    ? `'${input.acquiringPartyCountryCode}'`
+    : "NULL";
+  const cumulativeAmountSql =
+    typeof input.cumulativeAmount === "number"
+      ? String(input.cumulativeAmount)
+      : "NULL";
 
   const sql = `
     INSERT INTO aef_actions_table_entity (
       "creditBlockStartId","creditBlockEndId","creditAmount","vintage",
       "sector","sectoralScope","projectAuthorizationTime","authorizationId",
       "actionTime","actionType","aquiringParty",
-      "cooperativeApproachId","authorizationPurpose","isFirstTransfer",
-      "reportingYear","createdTime"
+      "cooperativeApproachId","acquiringPartyCountryCode",
+      "authorizationPurpose","isFirstTransfer",
+      "cumulativeAmount","reportingYear","createdTime"
     ) VALUES (
       '${startId}','${endId}',${amount},'2025',
       'Energy','1','${Date.now()}','${authId}',
       ${Date.now()},'${input.actionType}','${aquiringParty}',
-      ${caIdSql},${authPurposeSql},${isFirstTransfer},
-      ${reportingYear},${Date.now()}
+      ${caIdSql},${acquiringPartyCountryCodeSql},
+      ${authPurposeSql},${isFirstTransfer},
+      ${cumulativeAmountSql},${reportingYear},${Date.now()}
     ) RETURNING id;
   `.replace(/\s+/g, " ").trim();
 
@@ -635,6 +649,78 @@ export function seedAefActionDirect(input: {
   );
   const id = Number(out.trim().split("\n")[0]);
   return { id };
+}
+
+/**
+ * Seed an arbitrary credit_transactions_entity row by direct SQL. Unlike
+ * `seedPendingRetirementTransactionDirect` (which hard-codes
+ * type=Retired status=Pending) this helper accepts any
+ * CreditTransactionTypesEnum value plus a year-bound `createTime` so
+ * tests can drive the corresponding-adjustment year-window aggregation
+ * (corresponding-adjustment.service.ts:49-57: createTime in
+ * [Jan 1 ms, Jan 1 next-year ms)).
+ *
+ * The createTime is anchored at Jan 2 of the supplied year so we land
+ * comfortably inside the [yearStart, yearEnd) range regardless of
+ * timezone math.
+ */
+export function seedCreditTransactionDirect(input: {
+  type:
+    | "Issued"
+    | "Authorized"
+    | "FirstTransfer"
+    | "Transfered"
+    | "Acquired"
+    | "Retired"
+    | "UseTowardsNDC"
+    | "UseForOIMP"
+    | "VoluntaryCancellation"
+    | "OMGECancellation";
+  status?: "Pending" | "Completed" | "Cancelled";
+  amount: number;
+  year: number;
+  cooperativeApproachId?: string;
+  isFirstTransfer?: boolean;
+  senderId?: number;
+  recieverId?: number;
+  creditBlockId?: string;
+  serialNumber?: string;
+  projectRefId?: string;
+}): { transactionId: string } {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const suffix = uniqueSuffix();
+  const transactionId = `TEST-TXN-${suffix}`;
+  const status = input.status ?? "Completed";
+  const senderId = input.senderId ?? 0;
+  const recieverId = input.recieverId ?? 0;
+  const creditBlockId = input.creditBlockId ?? `TEST-BLK-${suffix}`;
+  const serialNumber = input.serialNumber ?? `SN-${suffix}`;
+  const projectRefId = input.projectRefId ?? `TEST-PROJ-${suffix}`;
+  const caIdSql = input.cooperativeApproachId
+    ? `'${input.cooperativeApproachId}'`
+    : "NULL";
+  const isFirstTransfer = input.isFirstTransfer ? "TRUE" : "FALSE";
+  // Jan 2 of the year is well inside [Jan 1 ms, Jan 1 next-year ms),
+  // matching the CA-ADJ year-window filter.
+  const createTime = new Date(input.year, 0, 2).getTime();
+
+  const sql = `
+    INSERT INTO credit_transactions_entity (
+      "id","senderId","recieverId","type","status",
+      "creditBlockId","serialNumber","amount","projectRefId",
+      "cooperativeApproachId","isFirstTransfer","createTime"
+    ) VALUES (
+      '${transactionId}', ${senderId}, ${recieverId}, '${input.type}', '${status}',
+      '${creditBlockId}','${serialNumber}', ${input.amount}, '${projectRefId}',
+      ${caIdSql}, ${isFirstTransfer}, ${createTime}
+    );
+  `.replace(/\s+/g, " ").trim();
+
+  execSync(
+    `podman exec ${container} psql -U root -d carbondev -c ${JSON.stringify(sql)}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+  return { transactionId };
 }
 
 export function seedEmissionRowDirect(input: {

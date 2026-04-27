@@ -1354,6 +1354,108 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
   });
 
   // ------------------------------------------------------------------
+  // Audit gap #26 (refresh leg) + new "Password reset" row in Section 2
+  // of docs/testing/e2e-coverage.md.
+  //
+  // Locks two unauthenticated AuthController contracts that previously
+  // had no E2E coverage:
+  //   - POST /national/auth/forgotPassword is reachable without auth
+  //     and returns 2xx for a known email, 4xx for an unknown one.
+  //   - POST /national/auth/login/refresh, given a valid refresh_token
+  //     captured from a fresh login, returns a new access_token.
+  //
+  // We use a raw request.newContext() (not createApiClient) for two
+  // reasons: the forgotPassword endpoint is unauthenticated, and
+  // createApiClient discards the refresh_token from the login response
+  // so we can't reach it through the helper. The harness mirrors the
+  // bad-credentials test directly above this block.
+  //
+  // We intentionally do NOT assert an exact 4xx code on the unknown-
+  // email branch — NestJS validation guards have shifted between 400
+  // and 404 between releases and the contract being locked here is
+  // "client error, not server error", not the precise status.
+  // ------------------------------------------------------------------
+  test.describe("Auth — password reset + token refresh", () => {
+    test("POST /auth/forgotPassword with a known email returns 2xx", async () => {
+      const ctx = await request.newContext();
+      try {
+        const res = await ctx.post(
+          "http://localhost:3000/national/auth/forgotPassword",
+          {
+            data: { email: "palinda+add@xeptagon.com" },
+          }
+        );
+        // Controller may return 200/201/204 depending on whether
+        // authService.forgotPassword resolves with a body or undefined.
+        // We assert only the 2xx band.
+        expect(res.ok()).toBe(true);
+      } finally {
+        await ctx.dispose();
+      }
+    });
+
+    test("POST /auth/forgotPassword with an unknown email returns 4xx (not 5xx)", async () => {
+      const ctx = await request.newContext();
+      try {
+        const res = await ctx.post(
+          "http://localhost:3000/national/auth/forgotPassword",
+          {
+            data: {
+              email: `unknown-${uniqueSuffix()}@example.invalid`,
+            },
+          }
+        );
+        expect(res.ok()).toBe(false);
+        expect(res.status()).toBeGreaterThanOrEqual(400);
+        expect(res.status()).toBeLessThan(500);
+      } finally {
+        await ctx.dispose();
+      }
+    });
+
+    test("POST /auth/login/refresh with a valid refresh token issues a new access_token", async () => {
+      const ctx = await request.newContext();
+      try {
+        // Step A — raw login to capture the refresh_token, which
+        // createApiClient does not expose.
+        const loginRes = await ctx.post(
+          "http://localhost:3000/national/auth/login",
+          {
+            data: {
+              username: "palinda+add@xeptagon.com",
+              password: "123",
+            },
+          }
+        );
+        expect(loginRes.ok()).toBe(true);
+        const loginBody = await loginRes.json();
+        const refreshToken: string =
+          loginBody?.refresh_token ?? loginBody?.data?.refresh_token;
+        expect(typeof refreshToken).toBe("string");
+        expect(refreshToken.length).toBeGreaterThan(10);
+
+        // Step B — exchange the refresh_token for a fresh access_token.
+        // RefreshLoginDto is camelCase ({ refreshToken }) even though
+        // the login response uses snake_case (refresh_token).
+        const refreshRes = await ctx.post(
+          "http://localhost:3000/national/auth/login/refresh",
+          {
+            data: { refreshToken },
+          }
+        );
+        await expectOk(refreshRes, "refresh-token round-trip");
+        const refreshBody = await refreshRes.json();
+        const newAccessToken: string =
+          refreshBody?.access_token ?? refreshBody?.data?.access_token;
+        expect(typeof newAccessToken).toBe("string");
+        expect(newAccessToken.length).toBeGreaterThan(10);
+      } finally {
+        await ctx.dispose();
+      }
+    });
+  });
+
+  // ------------------------------------------------------------------
   // Audit gap #27 Minor — role-based sidebar visibility.
   // The Sider menu (web/src/Components/Sider/layout.sider.tsx:98-118)
   // gates "Reports", "Corresponding Adjustments" and "Initial Reports"

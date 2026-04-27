@@ -46,8 +46,8 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Login as DNA ViewOnly | ✅ | `cross-cutting.spec.ts:528` | One test only; non-exhaustive. |
 | Login with bad credentials | ✅ | `cross-cutting.spec.ts:1335` | **Gap #25.** Wrong password returns 4xx, not 5xx — locks the contract that auth failures stay in the 401/403 band. |
 | Logout | ❌ | — | No flow exists in suite. |
-| Session expiry / token refresh | ❌ | — | No coverage. |
-| Password reset | ❌ | — | Absent. |
+| Session expiry / token refresh | ✅ | `cross-cutting.spec.ts:1416` | **Gap #26 (refresh leg).** Locks `/auth/login/refresh` round-trip: a refresh_token captured from a fresh login exchanges for a new `access_token`. Logout side still ❌ — no `/auth/logout` endpoint exists in the controller. |
+| Password reset (forgot + change flow) | ✅ | `cross-cutting.spec.ts:1379`, `:1397` | Locks POST `/auth/forgotPassword`: 2xx for a known email, 4xx (not 5xx) for an unknown email. Does not assert email body / SMTP delivery. |
 | Role-based sidebar visibility | ✅ | `cross-cutting.spec.ts:1366`, `:1375` | **Gap #27.** DNA sees Corresponding Adjustments + Initial Reports menu items; PD does not. Locks the gate at `web/src/Components/Sider/layout.sider.tsx:98-118`. |
 
 ### Cooperative Approach lifecycle
@@ -85,7 +85,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Partial update merge | ✅ | `:259` | |
 | Update nonexistent | ✅ | `:309` | 404. |
 | Update on Published IR | ✅ | `:321` | 400. |
-| **Update on Submitted (non-Published) IR** | ❌ | — | Only Published is tested as immutable; Submitted immutability is undefined and untested. |
+| **Update on Submitted (non-Published) IR** | ⚠ | `initial-report.spec.ts:784` | no immutability guard today — locked at initial-report.spec.ts:784. Service only blocks Published (initial-report.service.ts:184); Submitted edits succeed. |
 | Submit fully populated | ✅ | `:348` | |
 | Submit with nulled required field | ✅ | `initial-report.spec.ts:365` | **Was a runtime `.skip` because the update DTO rejected nulls — now covered.** Bypasses the DTO via `nullInitialReportSectionDirect` (direct SQL UPDATE on the JSONB column), then calls /submit and asserts a 400 listing the missing field. Drives the service-level "Initial report is incomplete. Missing sections" guard at programme-ledger.service.ts:229-233. |
 | Submit nonexistent | ✅ | `:407` | |
@@ -97,7 +97,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | PD cannot generate | ✅ | `:593` | 403. |
 | IR status preserved across re-read | ✅ | `cross-cutting:851` | Draft-then-Submitted. |
 | CA title change does NOT propagate to generated IR | ✅ | `cross-cutting:754` | Snapshot drift behaviour documented. |
-| **IR of a Revoked CA — what happens?** | ❌ | — | Neither `/generate` nor `/submit` has a Revoked-CA guard test. |
+| **IR of a Revoked CA — what happens?** | ⚠ | `initial-report.spec.ts:734` | no guard today — generate+submit succeed; locked at initial-report.spec.ts:734 (generate) and :760 (submit). Contrast with /authorize at programme.service.ts:6450-6458 which DOES gate on Revoked. |
 
 ### Programme / project lifecycle
 
@@ -186,9 +186,9 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Submit already-Submitted is idempotent | ✅ | `:443` | |
 | Submit nonexistent | ✅ | `:484` | 404. |
 | Two calcs for same (CA, year) produce distinct IDs | ✅ | `cross-cutting:816` | No-idempotency invariant. |
-| **Year with only acquisitions (no first-transfers)** | ❌ | — | Negative-emissionsBalance case unexercised. |
-| **Year with more acquisitions than transfers** | ❌ | — | Sign-flip safety. |
-| **Submit a CA-ADJ that has gone stale** (txns added after calc) | ❌ | — | Does the system recalc or use snapshot? Untested. |
+| **Year with only acquisitions (no first-transfers)** | ✅ | `corresponding-adjustment.spec.ts:346` | Gap #15a — direct-SQL Acquired txn for a unique (CA, year); locks `firstTransferred=0, acquired=N, used=0, emissionsBalance=-N` per Dec 2/CMA.3 ¶8. |
+| **Year with more acquisitions than transfers** | ✅ | `corresponding-adjustment.spec.ts:346` | Gap #15b — covered by the same test (transfers=0 is a strict subcase of acquisitions>transfers). Sign-flip safety locked. |
+| **Submit a CA-ADJ that has gone stale** (txns added after calc) | ✅ | `corresponding-adjustment.spec.ts:543` | Gap #14 — locks current frozen-snapshot behaviour: `submit()` only flips status, no recalc (corresponding-adjustment.service.ts:208-222). New txns added post-submit do not mutate the persisted aggregate. |
 | PD cannot calculate / query | ✅ | `:531`, `:549` | |
 | UI list / form / results | ✅ | `:568`, `:586`, `:614` | |
 
@@ -212,9 +212,9 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | UI /reports renders | ✅ | `:457` | |
 | UI export buttons exist | ✅ | `:470` | |
 | UI year picker + multi-select | ✅ | `:490` | |
-| **Row content**: `cooperativeApproachId`, `authorizationPurpose`, `isFirstTransfer`, `acquiringPartyCountryCode`, `reportingYear` | ❌ | — | Documented as covered; actual assertions are shape-only on empty or single-row data. |
+| **Row content**: `cooperativeApproachId`, `authorizationPurpose`, `isFirstTransfer`, `acquiringPartyCountryCode`, `reportingYear` | ✅ | `aef-reporting.spec.ts:530` | Gap #15 — full HTTP-driven CA + IR + direct-SQL programme + credit block + AEF row; queryAefRecords filtered by `cooperativeApproachId` confirms each Phase 4 column carries its seeded value via the reducer's `...record` spread. |
 | Empty year (nothingToExport) | ✅ | `:186` (merged with happy path) | |
-| Cumulative-amount monotonicity | ❌ | — | Annual report invariant. |
+| Cumulative-amount monotonicity | ✅ | `aef-reporting.spec.ts:622` | Gap #16 — 3 AEF rows seeded for 2024/2025/2026 with non-decreasing cumulativeAmount; assertion runs on `queryAefRecords` (the column surfaces via `...record`) since the CSV path lacks the column (prepareActionsData hand-copies a fixed set of fields, aef-report-management.service.ts:328-369). |
 
 ### Admin / config
 
@@ -343,28 +343,27 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Severity**: Major.
     **Suggested test**: add a Suspended → Active reactivation test; registry currently permits it since there is no state machine, so locking the accepted behaviour (or, if spec requires, a 400 guard) is the remaining work.
 
-13. **Flow**: IR submitted-but-not-published immutability.
+13. **Flow**: IR submitted-but-not-published immutability. **Status**: ⚠ partial — current no-guard behavior locked, awaiting decision on whether to add guard (see `initial-report.spec.ts:784`).
     **Edge case**: `PUT /update` on a Submitted IR.
     **Why it matters**: the Published-lock test exists (line 321); Submitted's lock status is undefined. A compliant registry should probably lock both.
     **Severity**: Major.
     **Suggested test**: submit, then attempt update of a section; assert rejection or accept with guard around which fields are mutable.
 
-14. **Flow**: Duplicate CA-ADJ calculations and downstream staleness.
-    **Edge case**: calc CA-ADJ for (CA, 2025) on day 1, submit; then add more transactions; re-calc is allowed (tested at cross-cutting:816) but what does the Submitted one contain?
-    **Why it matters**: if the submitted CA-ADJ snapshot is derived at calc time, later transactions are invisible (OK). If it derives at submit time, it double-counts. Behaviour is undefined-in-tests.
-    **Severity**: Major.
-    **Suggested test**: lock current behaviour either way.
+14. **Flow**: Duplicate CA-ADJ calculations and downstream staleness. **Status**: ✅ covered (`corresponding-adjustment.spec.ts:543`) — locks frozen-snapshot behaviour.
+    **Edge case**: calc CA-ADJ for (CA, year) on day 1, submit; then add more transactions; re-calc is allowed (tested at cross-cutting:816) but what does the Submitted one contain?
+    **Resolved behaviour**: `submit()` only flips `status` to Submitted (corresponding-adjustment.service.ts:208-222) — no recalc. Persisted snapshot is frozen at calc time; new txns added post-submit do NOT mutate the persisted aggregate. Test pins this contract; if a future commit adds a recalc-on-submit branch the assertion will fail and force an explicit decision.
+    **Severity**: Major (now closed).
 
-15. **Flow**: AEF row content correctness.
-    **Edge case**: after a programme lifecycle (CA + IR + issue + first-transfer + retire), assert each AEF row carries the expected `cooperativeApproachId`, `authorizationPurpose`, `isFirstTransfer`, `acquiringPartyCountryCode`, `reportingYear`.
-    **Why it matters**: the AEF tests verify download shape, not row content. A mis-wired reducer in `aef-report-management.service.ts` would ship silently.
-    **Severity**: Major.
-    **Suggested test**: seed fixture → trigger replicator → assert each field per row.
+15. **Flow**: AEF row content correctness. **Status**: ✅ covered (`aef-reporting.spec.ts:530`).
+    **Edge case**: after a programme lifecycle (CA + IR + programme + credit block + AEF row), assert the AEF row carries the expected `cooperativeApproachId`, `authorizationPurpose`, `isFirstTransfer`, `acquiringPartyCountryCode`, `reportingYear`.
+    **Why it matters**: the AEF tests previously verified download shape, not row content. A mis-wired reducer in `aef-report-management.service.ts` would have shipped silently.
+    **Severity**: Major (now closed).
+    **Coverage**: full HTTP-driven CA + IR + direct-SQL programme + credit block + AEF row; queryAefRecords filtered by the unique `cooperativeApproachId` confirms each Phase 4 column surfaces correctly via the reducer's `...record` spread (aef-report-management.service.ts:213-218).
 
-16. **Flow**: `cumulativeAmount` monotonicity in Annual Information.
+16. **Flow**: `cumulativeAmount` monotonicity in Annual Information. **Status**: ✅ covered (`aef-reporting.spec.ts:622`) — via queryAefRecords; CSV path lacks the column — see test comment.
     **Edge case**: transactions across 2024/2025/2026 → cumulative column never decreases.
-    **Severity**: Major.
-    **Suggested test**: seed 3 years of data; download ANNUAL_INFORMATION; assert sorted-ascending.
+    **Severity**: Major (now closed).
+    **Coverage detail**: 3 AEF rows seeded with non-decreasing `cumulativeAmount` for years 2024/2025/2026 against a unique CA id. Assertion runs on `queryAefRecords` sorted by `reportingYear` ASC because `prepareActionsData` (aef-report-management.service.ts:328-369) hand-copies a fixed set of fields onto `DataExportActions` and never touches `cumulativeAmount` or `reportingYear` — so the CSV download is exercised only as a smoke check. The seed helper (`seedAefActionDirect`) was extended in this pass to accept `cumulativeAmount` because no production service writes that column today.
 
 17. **Flow**: Suspended-CA authorize gate. **Status**: ✅ covered (`programme-lifecycle.spec.ts:209`).
     **Edge case**: attempt to authorize a programme under a Suspended CA.
@@ -413,8 +412,8 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Edge case**: `POST /auth/login` with a wrong password returns a 4xx (band 400-499). The assertion checks the band rather than locking the exact code so the test stays robust to NestJS auth-guard refactors that may shift between 400 and 401.
     **Severity**: Minor (now closed).
 
-26. **Flow**: Logout and session expiry.
-    **Edge case**: call protected endpoint with an expired token.
+26. **Flow**: Logout and session expiry / token refresh. **Status**: ⚠ partial (`cross-cutting.spec.ts:1416`).
+    **Edge case**: refresh-token round-trip ✅ — `POST /auth/login/refresh` with a refresh_token captured from a fresh login exchanges for a new `access_token`. Logout side still ❌ — no `/auth/logout` endpoint exists in the controller (verified at `backend/services/src/national-api/auth.controller.ts`), and "call protected endpoint with an expired token" remains uncovered.
     **Severity**: Minor.
 
 27. **Flow**: Role-based sidebar visibility. **Status**: ✅ covered (`cross-cutting.spec.ts:1366`, `:1375`).
