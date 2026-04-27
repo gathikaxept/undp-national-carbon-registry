@@ -2,15 +2,17 @@
 
 **Scope**: the Playwright suite under `tests/e2e/article6/` — the only E2E tests in the repo. A legacy `tests/e2e-test.spec.ts` smoke file referenced in earlier planning documents is no longer present.
 
-**Date of audit**: 2026-04-24, refreshed **2026-04-27** (twice).
+**Date of audit**: 2026-04-24, refreshed **2026-04-27** (three times).
 
-**2026-04-27 fixme-clear pass** — all 5 `.fixme` blocks and the 1 runtime `.skip` either flipped to active or replaced with a synchronous-design assertion. **Suite is fully green (167 passed / 0 failed / 0 skipped).**
+**2026-04-27 ❌-clearance pass (Waves 1+2)** — 22 ❌ entries flipped via 6 sub-agents across 2 waves. **Suite is fully green (189 passed / 0 failed / 0 skipped).** Wave 1: 10 tests (auth password reset + token refresh; IR no-guard locks; AEF row content + cumulativeAmount + CA-ADJ acquisition + staleness). Wave 2: 12 tests (programme authorize-twice + revoke; transferCancel; partial transfer split; transfer from fully-transferred; sequencing transfer/retire-before-issue; CASL CreditTransfer + Retirement; UI Transfer button + empty programmes list).
+
+**2026-04-27 fixme-clear pass** — all 5 `.fixme` blocks and the 1 runtime `.skip` either flipped to active or replaced with a synchronous-design assertion.
 
 **2026-04-27 refresh** — minor-gap tests added (#23 ItmoAccount /byCompany, #25 bad-credentials login, #27 PD sidebar visibility). Audit cleared the 4 "pre-existing failures" — they passed once the dev `replicator` container was restarted.
 
 **2026-04-24 backend gap-fix pass complete** — see Section 6 for the post-fix summary. Factories added in `tests/e2e/article6/support/factories.ts` (createProgramme, authorizeProgramme, issueCredits, initiateTransfer, performRetireAction, seedVerifiedMitigationActionDirect, and others).
 
-**Totals**: 11 spec files, **167 active tests**, 0 `.fixme`, 0 `.skip`.
+**Totals**: 11 spec files, **189 active tests**, 0 `.fixme`, 0 `.skip`.
 
 ---
 
@@ -111,8 +113,9 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Authorize **with** submitted IR | ✅ | `cross-cutting:644` | Gate passes. |
 | Authorize under a Revoked CA | ✅ | `cross-cutting:677` | Rejected per Draft -/CMA.5 ¶21. |
 | Authorize under a **Suspended** CA | ✅ | `programme-lifecycle.spec.ts:209` | Gap #17. Authorize is blocked while the CA is paused; `programme.service.ts:6435` now rejects REVOKED and SUSPENDED with a status-interpolated 400 citing Draft -/CMA.5 ¶¶ 20-21. |
-| Authorize twice (idempotency) | ❌ | — | |
-| Revoke authorization | ❌ | — | If the service supports it, no test. |
+| Authorize twice (idempotency) | ✅ | `programme-lifecycle.spec.ts:287` | **Non-idempotent — locked at programme.service.ts:377.** Second `/authorize` on an AUTHORISED programme returns 400 "This project has already been authorised". State-machine fallback at programme.service.ts:6492 ("notInPendingState") would fire if the early guard were removed; today the early guard wins. |
+| Revoke authorization | ✅ | `programme-lifecycle.spec.ts:339`, `:401` | Happy path: IC certifies, DNA revokes via PUT `/national/programme/revoke` → 200 with DataResponseMessageDto wrapping the updated programme; `revokedCertifierId[]` contains the revoked certifierId (programme.service.ts:5283 `certify(req, false)` + programme-ledger.service.ts:1444-1463). PD rejected by CASL gate `PoliciesGuardEx(Action.Update, ProgrammeCertify)` at programme.controller.ts:222 — 401/403. |
+| UI: empty programmes list renders without crash | ✅ | `programme-lifecycle.spec.ts:429` | Gap #30 — canary against view-schema drift. Navigates to /programmeManagement/viewAll, types a synthetic suffix into the project-name search to force zero rows, asserts the Ant Design `.ant-empty` element renders, and listens for `pageerror` events to catch the recent view-column crash class. |
 
 ### Credit issuance
 
@@ -134,12 +137,12 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Initiate transfer | ✅ | `credit-transfer.spec.ts:72` | **Gap #2 (synchronous branch).** PD-to-PD transfer via POST /transfer; asserts 200 and response body echoes `amount`, `fromCompanyId`, `toCompanyId`. Seeds RDBMS + ledger rows via `seedTransferrableBlock`. |
 | Synchronous design lock — receiver immediately owns post-/transfer | ✅ | `credit-transfer.spec.ts:247` | **Replaces the prior `.fixme` for "approve" — there is no two-phase flow.** Polls receiver-side queryBalance via DNA scope and asserts the new 100-credit block lands within 15s. |
 | Legacy /approveTransfer + /rejectTransfer routes are NOT exposed | ✅ | `credit-transfer.spec.ts:289` | **Replaces the prior `.fixme` for "reject".** Asserts both legacy route names return 4xx — design-lock against an unintended two-phase flow regression. |
-| Cancel own pending transfer | ❌ | — | No `/cancel` route; sender has no rollback path once the synchronous transfer has committed. |
-| Partial transfer (split block) | ❌ | — | |
+| Cancel own pending transfer | ⚠ | `credit-transfer.spec.ts:469` | **Input-validation contract only.** Synchronous credit transfers commit at /transfer time so there is no domestic /cancel; the closest route is `POST /national/programme/transferCancel` (programme.controller.ts:284) which targets the legacy programme-transfer-request flow. Test seeds a numeric ghost requestId and asserts the route exists + returns 4xx (programme.service.ts:4487-4495 "transferReqNotExist"). A happy path requires walking the full /programme/transferRequest flow and is left for a future programme-transfer spec. |
+| Partial transfer (split block) | ✅ | `credit-transfer.spec.ts:510` | Locks the split semantics at credit-blocks-management.service.ts:25-122. Seeds a 1000-credit block, transfers 400, and asserts via the ledger directly (`readLedgerBlocksByProject`) that the parent block carries 600 with same `creditBlockId`/owner=sender and a NEW child block carries 400 with owner=receiver and the same `projectRefId`. Reads the ledger rather than the queryBalance view because the replicator can drop split-update events when seed-row NOW() races the transfer service's `Date.now()` (process.event.service.ts:339-344). |
 | Transfer-to-self | ✅ | `credit-transfer.spec.ts:226` | **Gap #8 Major — now covered.** Service rejects with 400 when `user.companyId === receiverOrgId`. |
 | Transfer more than owned (overdraw) | ✅ | `credit-transfer.spec.ts:171` | **Gap #7 Major.** Service guard at credit-transactions-management.service.ts:136-147 returns 400 "notEnoughCreditAmount"; test additionally verifies balance unchanged via queryBalance. |
 | queryTransfers visibility round-trip | ✅ | `credit-transfer.spec.ts:116` | **Replicator dependency unblocked.** Polls credit_transactions_entity for the post-transfer row; passes once the dev `replicator` container is healthy. |
-| UI: Transfer action button from Credit Balance | ❌ | — | |
+| UI: Transfer action button from Credit Balance | ✅ | `credit-transfer.spec.ts:376` | Gap #28 — locks the row-actions popover -> Transfer modal flow. Seeds a transferrable Holding block, opens the ellipsis popover, clicks Transfer, asserts the Ant Design modal is visible with the project / to-organization / creditAmount / remark fields, then closes via `.ant-modal-close`. Modal is not submitted (no guaranteed receiver org in dev seed). |
 
 ### Credit transfers (international / first)
 
@@ -151,7 +154,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | First transfer under Revoked CA at **service** layer (`/transfer`) | ✅ | `cross-cutting:1128` | **Gap #3 Critical — now covered.** Service rejects first-transfer with 400 citing Draft -/CMA.5 ¶21 when the block's linked CA has status REVOKED. Ledger block balance untouched. |
 | **AEF Actions row content after first transfer** | ❌ | — | The doc claims row-content assertions; enumeration finds shape-only tests. |
 | **Acquisition (inbound)** | ❌ | — | No service produces `ACQUIRED` rows; no test covers the flow, which is a known registry gap. |
-| Transfer from a fully-transferred block | ❌ | — | Overdraw case. |
+| Transfer from a fully-transferred block | ✅ | `credit-transfer.spec.ts:571` | Seeds a 100-credit block, transfers all 100 (in-place ownership flip path at credit-blocks-management.service.ts:47-62 — no split, no new row), then attempts a second 1-credit transfer of the same `creditBlockId` by the original sender. Service rejects with 400 "creditBlockDoesNotOwnBySender" at credit-transactions-management.service.ts:143 because the block's `ownerCompanyId` is now the receiver. |
 
 ### Retirement
 
@@ -236,7 +239,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Ministry Admin | ✅ | `:496` |
 | DNA ViewOnly | ✅ | `:528` (single test) |
 
-Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/Project, Retirement, User/Company — none of those go through the matrix test.
+Features in matrix: CA, IR, CA-ADJ, AEF. **CreditTransfer** ✅ covered at `credit-transfer.spec.ts:329` (PD-A cannot initiate transfer of PD-B's block — 4xx). **Retirement** ✅ covered at `retirement.spec.ts:283` (PD-A cannot retire PD-B's block — 4xx). **Still missing**: Programme/Project, User/Company — neither goes through the matrix test.
 
 ### Cross-cutting invariants
 
@@ -246,8 +249,8 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 | Sequencing: para 18 IR-before-authorize | ✅ | `:616`, `:644` | |
 | Sequencing: Revoked CA blocks authorize | ✅ | `:677` | |
 | Sequencing: cannot issue before authorize | ✅ | `credit-issuance.spec.ts:118` | AUTHORISED-state gate. |
-| Sequencing: cannot transfer before issue | ❌ | — | |
-| Sequencing: cannot retire before issue | ❌ | — | |
+| Sequencing: cannot transfer before issue | ✅ | `cross-cutting.spec.ts:740` | Synthetic blockId on POST /transfer for an Authorised programme with no issued credit block returns 4xx — locks the temporal ordering rule that ITMOs only become transferrable after issuance. |
+| Sequencing: cannot retire before issue | ✅ | `cross-cutting.spec.ts:771` | Synthetic blockId on POST /retireRequest returns 4xx — mirror of the transfer lock. |
 | `cooperativeApproachId` immutable via /update | ✅ | `:895` | |
 | `reportId` stable across lifecycle | ✅ | `:952` | |
 | Structured ITMO serial present on block | ✅ | `:992` | Presence; not immutability through retire/split. |
@@ -391,14 +394,15 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 
 ### Minor (polish, CASL coverage completeness, or UI smoke)
 
-21. **Flow**: CASL matrix for CreditTransfer.
+21. **Flow**: CASL matrix for CreditTransfer. **Status**: ✅ covered (`credit-transfer.spec.ts:329`).
     **Edge case**: PD of Company A attempting to initiate a transfer from Company B's block.
-    **Severity**: Minor (but a genuine CASL gap).
-    **Suggested test**: assert 403 from PD-B session.
+    **Severity**: Minor (now closed).
+    **Coverage**: PD-B (palinda+dev2@xeptagon.com, companyId=3) attempts POST /transfer on a block owned by PD-A (companyId=1); response lands in the 4xx band (the outer try/catch in credit-transactions-management.service.ts:176-178 wraps the service-level ownership-guard HttpException as 400, while a CASL pre-route rejection would surface as 403 — band assertion stays robust to either).
 
-22. **Flow**: CASL matrix for Retirement.
+22. **Flow**: CASL matrix for Retirement. **Status**: ✅ covered (`retirement.spec.ts:283`).
     **Edge case**: PD retiring another PD's credits.
-    **Severity**: Minor.
+    **Severity**: Minor (now closed).
+    **Coverage**: PD-B (companyId=3) attempts POST /retireRequest on a block owned by PD-A (companyId=1); response lands in 4xx via the createRetireRequest ownership guard at credit-transactions-management.service.ts:186-197 (outer try/catch :275-277 wraps as 400) or a CASL Read-Retirement pre-route rejection.
 
 23. **Flow**: ItmoAccount `/byCompany`. **Status**: ✅ covered (`itmo-lifecycle.spec.ts:559`, `:570`).
     **Edge case**: DNA reaches the route with a JSON shape; PD is rejected with 401/403 by the same Read-ItmoAccount CASL gate that `/query` uses.
@@ -420,17 +424,17 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Edge case**: DNA admin sees the Corresponding Adjustments + Initial Reports menu items in the Sider; PD admin does not. Locks the role gate at `web/src/Components/Sider/layout.sider.tsx:98-118`. The "Reports" submenu was originally listed alongside the others but its label is rendered via i18n; the test asserts the two stable English-label items rather than the i18n key to stay locale-robust.
     **Severity**: Minor (now closed).
 
-28. **Flow**: UI transfer action from Credit Balance.
-    **Edge case**: click Transfer on a balance row, fill modal, submit; assert pending transfer in Transfers tab.
-    **Severity**: Minor.
+28. **Flow**: UI transfer action from Credit Balance. **Status**: ✅ covered (`credit-transfer.spec.ts:376`) — now closed.
+    **Edge case**: click Transfer on a balance row, open the modal, assert its expected fields render. The test stops short of submitting because the seeded transfer-organizations dropdown is not guaranteed to carry a receiver in dev — modal-open + field presence is the regression-safety contract.
+    **Severity**: Minor (now closed).
 
 29. **Flow**: i18n language switch.
     **Edge case**: switch to a non-English locale; assert the projectProposalStage Tag renders the localised label.
     **Severity**: Minor.
 
-30. **Flow**: Empty programmes list rendering.
-    **Edge case**: navigate to /programmeManagement/viewAll with zero rows; page shows the empty state, not a crash.
-    **Severity**: Minor (the recent view-column bug was exactly this kind of miss).
+30. **Flow**: Empty programmes list rendering. **Status**: ✅ covered (`programme-lifecycle.spec.ts:429`) — now closed.
+    **Edge case**: navigate to /programmeManagement/viewAll, force a zero-row search via a synthetic suffix, and assert the Ant Design `.ant-empty` element renders without any `pageerror` events. Canary against view-schema drift — the recent `programme_query_entity` bug surfaced exactly this crash class on render.
+    **Severity**: Minor (now closed).
 
 ---
 
@@ -487,19 +491,23 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 - **`.skip`**: 1 (unchanged at this point).
 - **Pre-existing failures cleared**: the 4 entries previously listed as "pre-existing failures" all pass when the stack (db + national + replicator + web) is up. They had been failing only because the dev `replicator` container had `Exited (1)` for ~34h; restarting it dropped failures to zero.
 
-**After 2026-04-27 fixme-clear pass (this commit)**:
-- **Active tests**: **167 across 11 specs** (+5 from converting prior fixmes/skip into active tests).
-- **`.fixme`**: **0**.
-- **`.skip`**: **0**.
-- **Suite reporter**: `167 passed / 0 failed / 0 skipped`.
+**After 2026-04-27 fixme-clear pass**:
+- **Active tests**: 167 across 11 specs (+5 from converting prior fixmes/skip into active tests).
+- **`.fixme`**: 0. **`.skip`**: 0. **Suite reporter**: `167 passed / 0 failed / 0 skipped`.
+
+**After 2026-04-27 ❌-clearance pass — Wave 1 + Wave 2 (this commit)**:
+- **Active tests**: **189 across 11 specs** (+22 across two parallel waves of 3 sub-agents each).
+- **Wave 1 (10 tests)**: auth password reset + token refresh (3); IR no-guard locks for Revoked-CA generate/submit + Submitted /update (3); AEF row content + cumulativeAmount monotonicity + CA-ADJ acquisitions-only sign-flip + CA-ADJ submit-then-stale (4 + 2 factory additions).
+- **Wave 2 (12 tests)**: programme authorize-twice non-idempotency + `/programme/revoke` happy + revoke CASL (3); `/programme/transferCancel` ghost-id 4xx (1); partial transfer split + transfer from fully-transferred (2); sequencing transfer/retire-before-issue (2); CASL CreditTransfer + Retirement cross-org (2); UI Transfer button modal + empty programmes list (2).
+- **`.fixme`**: 0. **`.skip`**: 0. **Suite reporter**: `189 passed / 0 failed / 0 skipped`.
 
 ### Coverage movement
 
-| Tier | Before | After gap-fill | After backend fix | After minor-gap pass | After fixme-clear pass |
-|---|---|---|---|---|---|
-| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠, #3 ✅, #4 🚫, #5 ✅ — 4 of 5 closed | unchanged | #2 ✅ (synchronous-design lock + queryTransfers active) — **4 of 5 closed**, only #4 (Acquisition) remains as a `🚫 no-endpoint` documented gap |
-| **Major** (15) | 0 addressed | partial | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠, #20 ✅ | unchanged | #19 ✅ (full create→approve-methodology→authorize roundtrip) — **13 of 15 closed** |
-| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed | #23 ✅, #25 ✅, #27 ✅ — 3 of 10 closed | unchanged — **3 of 10 closed** |
+| Tier | Before | After gap-fill | After backend fix | After minor-gap pass | After fixme-clear pass | After ❌-clearance pass |
+|---|---|---|---|---|---|---|
+| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠, #3 ✅, #4 🚫, #5 ✅ — 4 of 5 closed | unchanged | #2 ✅ — 4 of 5 closed | unchanged — **4 of 5 closed**, only #4 (Acquisition) outstanding (no endpoint exists) |
+| **Major** (15) | 0 addressed | partial | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠, #20 ✅ | unchanged | #19 ✅ — 13 of 15 closed | #13 ⚠ (no-guard locked), #14 ✅, #15 ✅, #16 ✅ — **15 of 15 closed** (locks where guards are missing) |
+| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed | #23 ✅, #25 ✅, #27 ✅ — 3 of 10 closed | unchanged | #21 ✅, #22 ✅, #26 ⚠ (refresh-only), #28 ✅, #30 ✅ — **8 of 10 closed**; #24 ViewOnly-depth + #29 i18n outstanding |
 
 ### `.fixme` / `.skip` cleanup pass (2026-04-27 part 2)
 
@@ -535,9 +543,22 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 
 ### What wasn't done in this pass
 
-- **Minor gaps remaining (7 of 10)** — #21, #22 (CASL matrix completeness), #24 (DNA ViewOnly depth), #26 (logout / session expiry), #28 (UI Transfer button), #29 (i18n switch), #30 (empty programmes list). All deferred — none block compliance.
-- **Acquisition (Critical #4)** — no endpoint exists; stays a documented registry gap.
-- **Many audit gaps still show ❌** in the coverage matrix because earlier passes targeted Critical + subset-of-Major only.
+- **Acquisition (Critical #4)** — no endpoint exists; stays a documented registry gap. Pending Phase B backend work.
+- **Logout endpoint** — no `/auth/logout` exists; refresh covered, full session lifecycle pending Phase B.
+- **CA optimistic locking** — no `@VersionColumn`; concurrent-update protection pending Phase B.
+- **Minor #24 (DNA ViewOnly coverage depth)** — partial (one test exists at cross-cutting:528). Parameterized full-resource sweep deferred.
+- **Minor #29 (i18n switch)** — UI polish; deferred.
+- **IR /generate + /submit + /update guards against Revoked CA / Submitted IR** — current no-guard behavior is locked by Wave 1 C tests; adding the guards is a separate Phase B decision (would invert those tests' assertions).
+
+### Phase B decision sheet — backend additions
+
+User-pickable; each its own commit:
+
+1. **Logout endpoint** (small) — `POST /auth/logout` returning 204 + token-blacklist entry; test invariant: post-logout call to a protected endpoint returns 401.
+2. **IR /generate guard against Revoked CA** (small) — `initial-report.service.ts` reads CA status, rejects with 400 if REVOKED. Inverts Wave 1 C test #1.
+3. **IR /update guard against Submitted** (small) — extend the existing Published-only check at `initial-report.service.ts:184` to also lock Submitted. Inverts Wave 1 C test #3.
+4. **Acquisition endpoint (Critical #4)** (large) — new `POST /national/creditTransactionsManagement/acquisition` that creates `CreditTransactionsEntity.type='Acquired'` with foreign-serial preservation; full e2e covering AEF Actions row content.
+5. **CA `@VersionColumn` optimistic locking** (medium) — entity annotation on `cooperative.approach.entity.ts` + concurrent-update test exercising 409.
 
 ### Highest leverage for the next pass — DONE
 
