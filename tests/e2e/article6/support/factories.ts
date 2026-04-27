@@ -97,26 +97,36 @@ export function seedProgrammeDirect(input: {
   cooperativeApproachId?: string;
   article6trade?: boolean;
   currentStage?: "New" | "AwaitingAuthorization" | "Approved" | "Authorised" | "Rejected";
-}): { programmeId: string } {
+  externalId?: string;
+}): { programmeId: string; externalId: string } {
   const container = process.env.E2E_DB_CONTAINER ?? "db";
   const programmeId = `TEST-PROG-${uniqueSuffix()}`;
+  const externalId = input.externalId ?? `TEST-EXT-${programmeId}`;
   const caIdSql = input.cooperativeApproachId
     ? `'${input.cooperativeApproachId}'`
     : "NULL";
   const article6 = input.article6trade === false ? "FALSE" : "TRUE";
   const currentStage = input.currentStage ?? "Approved";
+  // programmeProperties.geographicalLocation must be a non-null array
+  // because the post-METHODOLOGY-acceptance side effect
+  // sendRequestForLetterOfAuthorisation calls .length on it
+  // (programme.service.ts:1550 + letter.of.authorisation.request.gen.ts:35).
+  const programmePropertiesJson = JSON.stringify({
+    geographicalLocation: ["Abia"],
+    greenHouseGasses: ["CO2"],
+  }).replace(/'/g, "''");
   const sql = `
     INSERT INTO programme (
-      "programmeId","title","sectoralScope","sector","countryCodeA2",
+      "programmeId","externalId","title","sectoralScope","sector","countryCodeA2",
       "currentStage","startTime","endTime","creditEst","creditUnit",
       "proponentTaxVatId","companyId","article6trade","cooperativeApproachId",
       "programmeProperties","txTime","createdTime"
     ) VALUES (
-      '${programmeId}','Test Programme','1','Energy','NG',
+      '${programmeId}','${externalId}','Test Programme','1','Energy','NG',
       '${currentStage}',(EXTRACT(EPOCH FROM NOW())::bigint * 1000),
       (EXTRACT(EPOCH FROM NOW())::bigint * 1000) + 86400000,1000,'tCO2e',
       '{}', '{${input.companyId}}', ${article6}, ${caIdSql},
-      '{}'::jsonb,
+      '${programmePropertiesJson}'::jsonb,
       (EXTRACT(EPOCH FROM NOW())::bigint * 1000),
       (EXTRACT(EPOCH FROM NOW())::bigint * 1000)
     );
@@ -131,6 +141,7 @@ export function seedProgrammeDirect(input: {
   // fetches from the `programmes` table in the ledger DB.
   const ledgerData: Record<string, any> = {
     programmeId,
+    externalId,
     title: "Test Programme",
     sectoralScope: "1",
     sector: "Energy",
@@ -144,7 +155,10 @@ export function seedProgrammeDirect(input: {
     companyId: [input.companyId],
     article6trade: input.article6trade !== false,
     cooperativeApproachId: input.cooperativeApproachId ?? null,
-    programmeProperties: {},
+    programmeProperties: {
+      geographicalLocation: ["Abia"],
+      greenHouseGasses: ["CO2"],
+    },
     txTime: Date.now(),
     createdTime: Date.now(),
   };
@@ -157,7 +171,7 @@ export function seedProgrammeDirect(input: {
     { stdio: ["ignore", "ignore", "pipe"] }
   );
 
-  return { programmeId };
+  return { programmeId, externalId };
 }
 
 /**
@@ -271,6 +285,30 @@ export function setInitialReportStatusDirect(
 ): void {
   const container = process.env.E2E_DB_CONTAINER ?? "db";
   const sql = `UPDATE initial_report SET status='${status}' WHERE "reportId"='${reportId}';`;
+  execSync(
+    `podman exec ${container} psql -U root -d carbondev -c ${JSON.stringify(sql)}`,
+    { stdio: ["ignore", "ignore", "pipe"] }
+  );
+}
+
+/**
+ * Force a JSONB section of an initial_report row to NULL via direct
+ * SQL. Used by the submit-incomplete test because the update DTO
+ * rejects explicit nulls before they can reach the submit-layer
+ * completeness validator. Bypassing the DTO lets us drive the
+ * "Initial report is incomplete" 400 path directly.
+ */
+export function nullInitialReportSectionDirect(
+  reportId: string,
+  section:
+    | "participationDemonstration"
+    | "itmoMetrics"
+    | "ndcQuantification"
+    | "cooperativeApproachDetails"
+    | "environmentalIntegrity"
+): void {
+  const container = process.env.E2E_DB_CONTAINER ?? "db";
+  const sql = `UPDATE initial_report SET "${section}"=NULL WHERE "reportId"='${reportId}';`;
   execSync(
     `podman exec ${container} psql -U root -d carbondev -c ${JSON.stringify(sql)}`,
     { stdio: ["ignore", "ignore", "pipe"] }
@@ -838,7 +876,12 @@ export async function createProgramme(
     cooperativeApproachId,
     creditEst: creditEst ?? 1000,
     creditUnit: creditUnit ?? "tCO2e",
-    implementinguser: implementinguser ?? "e2e-implementer",
+    // The DTO validates @IsString only when article6trade=false, but
+    // the underlying programme.entity.ts column is bigint — the
+    // ledger-replicator NEVER converts and a string here poisons the
+    // event stream (replicator stalls retrying). Use the seeded DNA
+    // admin's user id (6) to keep the round-trip valid.
+    implementinguser: implementinguser ?? 6,
     environmentalAssessmentRegistrationNo:
       environmentalAssessmentRegistrationNo ?? `EAR-${suffix}`,
     // programme.service.ts:2225-2243 rejects create on CARBON_TRANSPARENCY
@@ -879,6 +922,59 @@ export async function authorizeProgramme(
 ): Promise<void> {
   const res = await api.put("national/programme/authorize", { programmeId });
   await expectOk(res, "authorizeProgramme");
+}
+
+// Tiny well-formed base64 PDF header. The registry uploads this as-is
+// to the document store and does not validate the PDF body — only that
+// the data URL prefix matches a known mime type
+// (programme.service.ts:212 fileExtensionMap).
+const TINY_PDF_DATA_URL =
+  "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKCg==";
+
+/**
+ * POST /national/programme/addDocument with type=DESIGN_DOCUMENT. When
+ * called as a DNA user, the document is auto-ACCEPTED. METHODOLOGY
+ * uploads require an ACCEPTED DESIGN_DOCUMENT to exist first
+ * (programme.service.ts:1665-1690 getExpectedDoc → 'invalidDocumentUpload'
+ * 400 if missing).
+ */
+export async function uploadDesignDocument(
+  api: ApiClient,
+  programmeId: string
+): Promise<void> {
+  const res = await api.post("national/programme/addDocument", {
+    programmeId,
+    // DocType.DESIGN_DOCUMENT = "0" (string value of the enum).
+    type: "0",
+    data: TINY_PDF_DATA_URL,
+  });
+  await expectOk(res, "uploadDesignDocument");
+}
+
+/**
+ * POST /national/programme/addDocument with type=METHODOLOGY_DOCUMENT.
+ * When called as a DNA user the document is auto-ACCEPTED on the same
+ * request and approveDocumentCommit fires, flipping programme
+ * .currentStage from AWAITING_AUTHORIZATION to APPROVED
+ * (programme.service.ts:1166-1183). Required to unblock the
+ * /authorize state machine, which demands currentStage=APPROVED.
+ *
+ * Caller must have already uploaded an ACCEPTED DESIGN_DOCUMENT for
+ * this programme (the addDocument flow validates the predecessor at
+ * service line 1665). For DNA-driven flows that means a prior
+ * uploadDesignDocument() call against the same programmeId.
+ */
+export async function uploadMethodologyDocument(
+  api: ApiClient,
+  programmeId: string
+): Promise<void> {
+  const res = await api.post("national/programme/addDocument", {
+    programmeId,
+    // DocType.METHODOLOGY_DOCUMENT = "1" (string value of the enum).
+    type: "1",
+    data: TINY_PDF_DATA_URL,
+  });
+  await expectOk(res, "uploadMethodologyDocument");
 }
 
 export interface IssueCreditAction {

@@ -108,22 +108,14 @@ test.describe("Credit transfer - POST /national/creditTransactionsManagement/tra
   // ------------------------------------------------------------------
   // Gap #2 companion — queryTransfers visibility. Separated from the
   // synchronous happy-path test because the credit_transactions_entity
-  // table is populated by the ledger-replicator container, which is
-  // optional in the dev stack. When the replicator is down this
-  // assertion would otherwise mask the (passing) synchronous
-  // service-layer behaviour in an unrelated timeout.
+  // table is populated by the ledger-replicator container. When the
+  // replicator is exited this assertion times out at 15s; the
+  // expectation here is that the replicator is up alongside `national`
+  // and `db` in the dev compose stack.
   // ------------------------------------------------------------------
-  test.fixme(
+  test(
     "post-transfer row visible to sender + receiver via POST /queryTransfers",
     async ({ apiPd }) => {
-      // Blocker: the ledger-replicator container
-      // (undp-national-carbon-registry_replicator_1) polls the ledger
-      // credit_blocks table and derives RDBMS credit_transactions_entity
-      // rows. When the container is Exited this assertion hangs for 15s
-      // even though the transfer itself completed synchronously. Unfix
-      // when the replicator is part of the CI stack, or swap this
-      // assertion for a direct read of credit_blocks_entity + a diff
-      // of ownerCompanyId.
       const seeded = seedTransferrableBlock({
         ownerCompanyId: SENDER_COMPANY_ID,
         creditAmount: 1000,
@@ -240,69 +232,80 @@ test.describe("Credit transfer - POST /national/creditTransactionsManagement/tra
   );
 
   // ------------------------------------------------------------------
-  // Gap #2 companion — approve-pending-transfer. Fixme: no approve route.
+  // Synchronous-transfer design lock. The service commits ownership at
+  // /transfer time (credit-transactions-management.service.ts:148
+  // `programmeLedgerService.transferCredits(...)`) — there is no
+  // pending state and no /approve or /reject route on
+  // creditTransactionsManagement (controller exposes only 6 routes:
+  // transfer, retireRequest, performRetireAction, queryBalance,
+  // queryTransfers, queryRetirements). These two tests lock the
+  // current design end-to-end: post-initiate the receiver immediately
+  // owns the credits, and the legacy /approveTransfer / /rejectTransfer
+  // route names return 4xx. If a two-phase flow lands later these
+  // tests should be flipped to drive the new state machine.
   // ------------------------------------------------------------------
-  test.fixme(
-    "DNA approves a pending transfer — ownership flips; receiver sees new block",
-    async ({ apiDna, apiPd }) => {
-      // Blocker: audit 2026-04-24 exploration — no
-      // POST /national/creditTransactionsManagement/approve (or
-      // /approveTransfer) route exists. See
-      // credit-transactions-management.controller.ts (only 6 routes:
-      // transfer, retireRequest, performRetireAction, queryBalance,
-      // queryTransfers, queryRetirements). The transfer service finalises
-      // ownership at initiate time — there is no pending state to
-      // approve. If a two-phase flow lands, this test should:
-      //   1. apiPd initiates transfer.
-      //   2. apiDna POSTs /approve with { transactionId }.
-      //   3. Assert receiver-side queryBalance shows the new block with
-      //      the original projectRefId + a descendant ITMO serial, and
-      //      sender-side block balance is decremented.
-      const seeded = seedCreditBlockDirect({
-        ownerCompanyId: SENDER_COMPANY_ID,
-        creditAmount: 1000,
-        accountType: "Holding",
-      });
-      const initiated = await initiateTransfer(apiPd, {
-        blockId: seeded.creditBlockId,
-        receiverOrgId: RECEIVER_COMPANY_ID,
-        amount: 100,
-      });
-      const res = await apiDna.post(
-        "national/creditTransactionsManagement/approveTransfer",
-        { transactionId: initiated.transactionId }
-      );
-      expect(res.status()).toBe(200);
-    }
-  );
+  test("post-initiate the receiver immediately owns the transferred credits (synchronous design lock)", async ({
+    apiPd,
+    apiDna,
+  }) => {
+    const seeded = seedTransferrableBlock({
+      ownerCompanyId: SENDER_COMPANY_ID,
+      creditAmount: 1000,
+      accountType: "Holding",
+    });
+    await initiateTransfer(apiPd, {
+      blockId: seeded.creditBlockId,
+      receiverOrgId: RECEIVER_COMPANY_ID,
+      amount: 100,
+    });
 
-  // ------------------------------------------------------------------
-  // Gap #2 companion — reject-pending-transfer. Same blocker.
-  // ------------------------------------------------------------------
-  test.fixme(
-    "DNA rejects a pending transfer — ownership unchanged, receiver sees no block",
-    async ({ apiDna, apiPd }) => {
-      // Blocker: audit 2026-04-24 exploration — no
-      // POST /creditTransactionsManagement/reject route exists. See
-      // approve-fixme above for the same controller-inventory reference.
-      // Once a pending-state flow lands, assert the receiver-side
-      // queryBalance is empty for this block and sender balance
-      // unchanged.
-      const seeded = seedCreditBlockDirect({
-        ownerCompanyId: SENDER_COMPANY_ID,
-        creditAmount: 1000,
-        accountType: "Holding",
-      });
-      const initiated = await initiateTransfer(apiPd, {
-        blockId: seeded.creditBlockId,
-        receiverOrgId: RECEIVER_COMPANY_ID,
-        amount: 100,
-      });
-      const res = await apiDna.post(
-        "national/creditTransactionsManagement/rejectTransfer",
-        { transactionId: initiated.transactionId }
+    // After /transfer the sender's block balance is split: the source
+    // block keeps 900 (RDBMS view subtracts reservedCreditAmount), and
+    // a new block owned by the receiver carries 100. We query as DNA
+    // because the sender PD's CASL scope hides receiver-owned blocks.
+    // The replicator lands the new row a tick after the synchronous
+    // ledger write, so we poll briefly.
+    let receiverBlock: any;
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline && !receiverBlock) {
+      const qRes = await apiDna.post(
+        "national/creditTransactionsManagement/queryBalance",
+        { page: 1, size: 200, sort: { key: "createdDate", order: "DESC" } }
       );
-      expect(res.status()).toBe(200);
+      if (qRes.status() < 300) {
+        const rows = extractRows(await apiDna.json<any>(qRes));
+        receiverBlock = rows.find(
+          (r: any) =>
+            r.projectId === seeded.projectRefId &&
+            Number(r.receiverId ?? r.recieverId) === RECEIVER_COMPANY_ID &&
+            Number(r.creditAmount) === 100
+        );
+      }
+      if (!receiverBlock) await new Promise((r) => setTimeout(r, 500));
     }
-  );
+    expect(receiverBlock, "receiver did not see the 100-credit transferred block").toBeTruthy();
+  });
+
+  test("legacy /approveTransfer + /rejectTransfer route names are not exposed (no two-phase state machine)", async ({
+    apiDna,
+  }) => {
+    // The synchronous design intentionally omits these routes. If
+    // either appears, this test goes red and the design-lock test
+    // above must be revisited.
+    const approveRes = await apiDna.post(
+      "national/creditTransactionsManagement/approveTransfer",
+      { transactionId: `LEGACY-NOT-EXPOSED-${uniqueSuffix()}` }
+    );
+    expect(approveRes.ok()).toBe(false);
+    expect(approveRes.status()).toBeGreaterThanOrEqual(400);
+    expect(approveRes.status()).toBeLessThan(500);
+
+    const rejectRes = await apiDna.post(
+      "national/creditTransactionsManagement/rejectTransfer",
+      { transactionId: `LEGACY-NOT-EXPOSED-${uniqueSuffix()}` }
+    );
+    expect(rejectRes.ok()).toBe(false);
+    expect(rejectRes.status()).toBeGreaterThanOrEqual(400);
+    expect(rejectRes.status()).toBeLessThan(500);
+  });
 });
