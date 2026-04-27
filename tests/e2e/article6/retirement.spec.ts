@@ -36,6 +36,7 @@
  * Parallel safety: every seeded block / tx uses uniqueSuffix().
  */
 import { test, expect } from "./support/fixtures";
+import { createApiClient } from "./support/api-client";
 import {
   seedTransferrableBlock,
   seedPendingRetirementTransactionDirect,
@@ -261,5 +262,50 @@ test.describe("Credit retirement - /retireRequest + /performRetireAction", () =>
     );
     expect(res.ok()).toBe(false);
     expect(res.status()).toBe(400);
+  });
+
+  // ------------------------------------------------------------------
+  // CASL matrix completion (audit gap #22 Minor): a PD belonging to
+  // Company B must not be able to retire a block owned by Company A.
+  // The fixtures only expose `apiPd` for Org 2 (companyId=1); for the
+  // second PD we mint a raw client via createApiClient against
+  // palinda+dev2@xeptagon.com (Org 3, companyId=3 — verified by the
+  // credit-transfer.spec.ts header).
+  //
+  // createRetireRequest's service guard at
+  // credit-transactions-management.service.ts:186-197 requires the
+  // caller to own the block (PROJECT_DEVELOPER + matching companyId
+  // on the block). The outer try/catch at :275-277 wraps any
+  // HttpException as 400, so the client-visible status is 4xx
+  // regardless of whether the rejection lands as 400 (service guard)
+  // or 403 (CASL Read-Retirement).
+  // ------------------------------------------------------------------
+  test("PD-A cannot retire PD-B's block (CASL Retirement)", async () => {
+    // Block owned by PD-A (companyId=1).
+    const seeded = seedTransferrableBlock({
+      ownerCompanyId: PD_COMPANY_ID,
+      creditAmount: 1000,
+      accountType: "Holding",
+    });
+
+    const apiPdB = await createApiClient({
+      email: "palinda+dev2@xeptagon.com",
+      password: "123",
+    });
+    try {
+      const res = await apiPdB.post(
+        "national/creditTransactionsManagement/retireRequest",
+        {
+          blockId: seeded.creditBlockId,
+          amount: 50,
+          retirementType: "Voluntary Cancellations",
+        }
+      );
+      expect(res.ok()).toBe(false);
+      expect(res.status()).toBeGreaterThanOrEqual(400);
+      expect(res.status()).toBeLessThan(500);
+    } finally {
+      await apiPdB.request.dispose();
+    }
   });
 });

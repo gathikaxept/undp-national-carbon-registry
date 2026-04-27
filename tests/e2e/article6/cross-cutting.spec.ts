@@ -723,6 +723,72 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
       expect(body).toMatch(/revoked/i);
       expect(body).toMatch(/20-21/);
     });
+
+    // ----------------------------------------------------------------
+    // Sequencing invariant: cannot transfer before issue.
+    //
+    // Locks the temporal ordering rule that ITMOs only become
+    // transferrable after they have been issued onto a credit block.
+    // We seed an Authorised programme (no ledger credit_blocks row),
+    // then attempt POST /transfer with a synthetic blockId that does
+    // not exist anywhere. The service's block lookup
+    // (credit-transactions-management.service.ts) cannot find the
+    // block and rejects in the 4xx band — locking the contract that
+    // a transfer cannot land before the corresponding /programme/issue
+    // call has materialised the block.
+    // ----------------------------------------------------------------
+    test("cannot transfer credits from a non-existent block (locks: cannot transfer before issue)", async ({
+      apiPd,
+    }) => {
+      // Programme exists but no credit blocks have been issued yet.
+      seedProgrammeDirect({
+        companyId: 1,
+        article6trade: false,
+        currentStage: "Authorised",
+      });
+      const ghostBlockId = `BLOCK-NEVER-${uniqueSuffix()}`;
+      const res = await apiPd.post(
+        "national/creditTransactionsManagement/transfer",
+        {
+          blockId: ghostBlockId,
+          receiverOrgId: 3,
+          amount: 100,
+        }
+      );
+      expect(res.ok()).toBe(false);
+      expect(res.status()).toBeGreaterThanOrEqual(400);
+      expect(res.status()).toBeLessThan(500);
+    });
+
+    // ----------------------------------------------------------------
+    // Sequencing invariant: cannot retire before issue.
+    //
+    // Mirror of the transfer-before-issue lock above. Retirement
+    // (POST /retireRequest) is only meaningful against a block that
+    // has been issued; a synthetic blockId must be rejected before any
+    // ledger reservation is attempted. Locks the contract end-to-end.
+    // ----------------------------------------------------------------
+    test("cannot retire credits from a non-existent block (locks: cannot retire before issue)", async ({
+      apiPd,
+    }) => {
+      seedProgrammeDirect({
+        companyId: 1,
+        article6trade: false,
+        currentStage: "Authorised",
+      });
+      const ghostBlockId = `BLOCK-NEVER-${uniqueSuffix()}`;
+      const res = await apiPd.post(
+        "national/creditTransactionsManagement/retireRequest",
+        {
+          blockId: ghostBlockId,
+          amount: 100,
+          retirementType: "Voluntary Cancellations",
+        }
+      );
+      expect(res.ok()).toBe(false);
+      expect(res.status()).toBeGreaterThanOrEqual(400);
+      expect(res.status()).toBeLessThan(500);
+    });
   });
 
   // ------------------------------------------------------------------
