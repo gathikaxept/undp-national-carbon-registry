@@ -318,16 +318,41 @@ test.describe("OMGE/SOP Deductions - Article 6.2", () => {
       expect(match.sopDeductedAtIssuance).toBe(true);
     });
 
-    test.fixme(
-      "issuing with ITMO_AUTO_DEDUCT_AT_ISSUANCE=false leaves both flags false",
-      async () => {
-        // Requires a backend restart mid-test to flip the env var.
-        // Playwright cannot do this without an out-of-band shell hook,
-        // and even then the global workers would all see the new value.
-        // Document-only until a dedicated test harness is wired that
-        // can boot a second backend instance with the toggle off.
-      }
-    );
+    // Mirror of the flags=true round-trip above, but with both flags
+    // FALSE. This is what a block looks like when issued under
+    // ITMO_AUTO_DEDUCT_AT_ISSUANCE=false. We seed directly because
+    // flipping the env var at runtime is not possible from Playwright;
+    // the assertion that matters is that the queryBalance view
+    // round-trips both flag values (TRUE above and FALSE here)
+    // identically — i.e. the column is selected, typed bool, and not
+    // coerced to anything else.
+    test("a credit block seeded with both flags=false is round-tripped by queryBalance", async ({
+      apiDna,
+    }) => {
+      const seeded = seedCreditBlockDirect({
+        ownerCompanyId: 1,
+        creditAmount: 1000,
+        accountType: "Holding",
+        omgeDeductedAtIssuance: false,
+        sopDeductedAtIssuance: false,
+      });
+      const res = await apiDna.post(
+        "national/creditTransactionsManagement/queryBalance",
+        {
+          page: 1,
+          size: 50,
+          sort: { key: "createdDate", order: "DESC" },
+        }
+      );
+      await expectOk(res, "queryBalance after flag=false seed");
+      const body = await apiDna.json<any>(res);
+      const data = body?.data ?? body;
+      const rows = Array.isArray(data) ? data : data?.data ?? [];
+      const match = rows.find((r: any) => r.id === seeded.creditBlockId);
+      expect(match, "seeded flags=false block not in balance view").toBeTruthy();
+      expect(match.omgeDeductedAtIssuance).toBe(false);
+      expect(match.sopDeductedAtIssuance).toBe(false);
+    });
   });
 
   // ------------------------------------------------------------------

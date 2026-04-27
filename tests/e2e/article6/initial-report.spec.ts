@@ -40,6 +40,7 @@ import { BASE_URL } from "./support/auth";
 import {
   createCooperativeApproach,
   generateInitialReport,
+  nullInitialReportSectionDirect,
   setInitialReportStatusDirect,
   submitInitialReport,
   uniqueSuffix,
@@ -371,26 +372,12 @@ test.describe("Initial Report - Article 6.2", () => {
         cooperativeApproachId: ca.cooperativeApproachId,
       });
 
-      // Null out environmentalIntegrity via the update DTO. The DTO's
-      // `@IsOptional()` means an explicit null bypasses the
-      // "undefined => skip" guard at service line 200, and the
-      // assignment writes null to the jsonb column.
-      const patchRes = await apiDna.put("national/initialReport/update", {
-        reportId: gen.reportId,
-        environmentalIntegrity: null,
-      });
-      // Some validator stacks reject explicit null for an optional
-      // jsonb field with 400. If that happens, this particular
-      // null-out path isn't available and we treat the test as
-      // skipped; the service's completeness check still has unit
-      // coverage inside the backend package.
-      if (!patchRes.ok()) {
-        test.skip(
-          true,
-          `update-with-null rejected by DTO layer (${patchRes.status()}); cannot exercise submit-incomplete path via Playwright`
-        );
-        return;
-      }
+      // The update DTO rejects explicit nulls before they reach the
+      // submit-layer completeness validator (service lines 222-234),
+      // so we null the JSONB column directly and then call submit.
+      // This drives the "Initial report is incomplete. Missing
+      // sections: <list>" 400 path that no other test exercises.
+      nullInitialReportSectionDirect(gen.reportId, "environmentalIntegrity");
 
       const submitRes = await apiDna.put(
         `national/initialReport/submit?id=${encodeURIComponent(gen.reportId)}`

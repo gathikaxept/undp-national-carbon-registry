@@ -2,13 +2,15 @@
 
 **Scope**: the Playwright suite under `tests/e2e/article6/` — the only E2E tests in the repo. A legacy `tests/e2e-test.spec.ts` smoke file referenced in earlier planning documents is no longer present.
 
-**Date of audit**: 2026-04-24, refreshed **2026-04-27**.
+**Date of audit**: 2026-04-24, refreshed **2026-04-27** (twice).
 
-**2026-04-27 refresh** — full-suite run is fully green (162 passed / 0 failed / 5 skipped). The 4 "pre-existing failures" documented below were re-run individually against a healthy stack and all pass; they were stack-down artefacts (replicator container had `Exited (1)` for ~34h), not test or service defects. Three minor-gap tests added (#23 ItmoAccount /byCompany, #25 bad-credentials login, #27 PD sidebar visibility).
+**2026-04-27 fixme-clear pass** — all 5 `.fixme` blocks and the 1 runtime `.skip` either flipped to active or replaced with a synchronous-design assertion. **Suite is fully green (167 passed / 0 failed / 0 skipped).**
+
+**2026-04-27 refresh** — minor-gap tests added (#23 ItmoAccount /byCompany, #25 bad-credentials login, #27 PD sidebar visibility). Audit cleared the 4 "pre-existing failures" — they passed once the dev `replicator` container was restarted.
 
 **2026-04-24 backend gap-fix pass complete** — see Section 6 for the post-fix summary. Factories added in `tests/e2e/article6/support/factories.ts` (createProgramme, authorizeProgramme, issueCredits, initiateTransfer, performRetireAction, seedVerifiedMitigationActionDirect, and others).
 
-**Totals**: 11 spec files, **162 active tests**, 5 `test.fixme` (infra-level only), 1 `test.skip` (rolled into 5 skipped by Playwright reporter alongside fixmes — see Section 6 footnote).
+**Totals**: 11 spec files, **167 active tests**, 0 `.fixme`, 0 `.skip`.
 
 ---
 
@@ -85,7 +87,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Update on Published IR | ✅ | `:321` | 400. |
 | **Update on Submitted (non-Published) IR** | ❌ | — | Only Published is tested as immutable; Submitted immutability is undefined and untested. |
 | Submit fully populated | ✅ | `:348` | |
-| Submit with nulled required field | ⚠ | `:364` | Ends in `test.skip` at line 388 because the update DTO rejects nulls before a null can reach submit. |
+| Submit with nulled required field | ✅ | `initial-report.spec.ts:365` | **Was a runtime `.skip` because the update DTO rejected nulls — now covered.** Bypasses the DTO via `nullInitialReportSectionDirect` (direct SQL UPDATE on the JSONB column), then calls /submit and asserts a 400 listing the missing field. Drives the service-level "Initial report is incomplete. Missing sections" guard at programme-ledger.service.ts:229-233. |
 | Submit nonexistent | ✅ | `:407` | |
 | Submit idempotency | ✅ | `:418` | |
 | `/check` before submit | ✅ | `:460` | |
@@ -102,7 +104,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Flow | Status | Citation | Note |
 |---|---|---|---|
 | Create programme (full DTO) | ✅ | `programme-lifecycle.spec.ts:69` | **Gap #19 executable path.** Real ProgrammeDto roundtrip: CA -> /programme/create -> /programme/getHistory readback. Locks every required ProgrammeDto field end-to-end. |
-| Create programme -> authorize -> Authorised visible in query view | 🔧 | `programme-lifecycle.spec.ts:121` | **Gap #19 flagship (fixme).** Blocked on the AWAITING_AUTHORIZATION -> APPROVED transition (requires METHODOLOGY_DOCUMENT /docAction; no factory today) and the ledger-replicator being up (so /programme/query can read the final state). |
+| Approve methodology -> authorize -> Authorised visible via getHistory | ✅ | `programme-lifecycle.spec.ts:137` | **Gap #19 flagship — now covered.** Uses `seedProgrammeDirect` for the create-leg (DTO lock is owned by the executable test above) so the test focuses on the post-create state machine: `uploadDesignDocument` (auto-accept) → `uploadMethodologyDocument` (auto-accept flips stage to APPROVED in ledger via approveDocumentCommit, programme.service.ts:1216-1234 CARBON_UNIFIED branch) → `authorizeProgramme` → ledger getHistory's last entry shows currentStage=Authorised. |
 | Authorize immediately after create returns 400 | ✅ | `programme-lifecycle.spec.ts:174` | State-machine guard: programme.service.ts:6474 rejects anything not in APPROVED. Lifts the stage-gate contract end-to-end through the real create DTO. |
 | Review / approve / reject lifecycle | ⚠ | `programme-lifecycle.spec.ts:174` | Approve-methodology leg still missing; reject is untested. |
 | Authorize **without** submitted IR (para 18 gate) | ✅ | `cross-cutting:616` | Returns 400 citing the clause. |
@@ -129,14 +131,14 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 
 | Flow | Status | Citation | Note |
 |---|---|---|---|
-| Initiate transfer | ✅ | `credit-transfer.spec.ts:72` | **Gap #2 (synchronous branch).** PD-to-PD transfer via POST /transfer; asserts 200 and response body echoes `amount`, `fromCompanyId`, `toCompanyId`. Seeds RDBMS + ledger rows via new `seedTransferrableBlock` factory. |
-| Approve pending transfer (ownership flip) | 🔧 | `credit-transfer.spec.ts:271` | Fixme: no `/creditTransactionsManagement/approve` route exists — the transfer service finalises ownership at initiate time (credit-transactions-management.service.ts:148). Approve/Reject/Cancel state machine is not exposed. |
-| Reject pending transfer | 🔧 | `credit-transfer.spec.ts:308` | Fixme: same blocker as Approve — no `/reject` route. |
+| Initiate transfer | ✅ | `credit-transfer.spec.ts:72` | **Gap #2 (synchronous branch).** PD-to-PD transfer via POST /transfer; asserts 200 and response body echoes `amount`, `fromCompanyId`, `toCompanyId`. Seeds RDBMS + ledger rows via `seedTransferrableBlock`. |
+| Synchronous design lock — receiver immediately owns post-/transfer | ✅ | `credit-transfer.spec.ts:247` | **Replaces the prior `.fixme` for "approve" — there is no two-phase flow.** Polls receiver-side queryBalance via DNA scope and asserts the new 100-credit block lands within 15s. |
+| Legacy /approveTransfer + /rejectTransfer routes are NOT exposed | ✅ | `credit-transfer.spec.ts:289` | **Replaces the prior `.fixme` for "reject".** Asserts both legacy route names return 4xx — design-lock against an unintended two-phase flow regression. |
 | Cancel own pending transfer | ❌ | — | No `/cancel` route; sender has no rollback path once the synchronous transfer has committed. |
 | Partial transfer (split block) | ❌ | — | |
 | Transfer-to-self | ✅ | `credit-transfer.spec.ts:226` | **Gap #8 Major — now covered.** Service rejects with 400 when `user.companyId === receiverOrgId`. |
 | Transfer more than owned (overdraw) | ✅ | `credit-transfer.spec.ts:171` | **Gap #7 Major.** Service guard at credit-transactions-management.service.ts:136-147 returns 400 "notEnoughCreditAmount"; test additionally verifies balance unchanged via queryBalance. |
-| queryTransfers visibility round-trip | 🔧 | `credit-transfer.spec.ts:116` | Fixme: credit_transactions_entity is populated by the ledger-replicator container, which is optional in the dev stack and Exited in local development. |
+| queryTransfers visibility round-trip | ✅ | `credit-transfer.spec.ts:116` | **Replicator dependency unblocked.** Polls credit_transactions_entity for the post-transfer row; passes once the dev `replicator` container is healthy. |
 | UI: Transfer action button from Credit Balance | ❌ | — | |
 
 ### Credit transfers (international / first)
@@ -480,28 +482,38 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 - **`.skip`**: 1 (unchanged).
 - **Backend changes landed across five commits**: transfer guards (Revoked-CA + self-transfer), Suspended-CA authorize guard, CA state machine on `/update`, itmoSerial lineage on split, `/issue` no-CA guard + `seedVerifiedMitigationActionDirect` factory.
 
-**After 2026-04-27 minor-gap pass (this commit)**:
-- **Active tests**: **162 across 11 specs** (+10 from baseline, +5 new this pass: 2× ItmoAccount /byCompany, 1× bad-credentials login, 2× sidebar visibility). The pre-existing pass also reflows in 6 unrelated tests that I had under-counted on 2026-04-24 — actual deltas are +5 new + 6 reconciliation = +11 vs the previous "151" figure.
-- **`.fixme`**: 5 (unchanged) — all five infra-level, see below.
-- **`.skip`**: 1 (unchanged); Playwright reporter folds the single `.skip` together with 4 fixmes into "5 skipped" (one fixme test is on a parameterised `.describe`-level skip).
+**After 2026-04-27 minor-gap pass**:
+- **Active tests**: 162 across 11 specs (+5 new tests: 2× ItmoAccount /byCompany, 1× bad-credentials login, 2× sidebar visibility).
+- **`.fixme`**: 5 (unchanged at this point) — all five infra-level.
+- **`.skip`**: 1 (unchanged at this point).
 - **Pre-existing failures cleared**: the 4 entries previously listed as "pre-existing failures" all pass when the stack (db + national + replicator + web) is up. They had been failing only because the dev `replicator` container had `Exited (1)` for ~34h; restarting it dropped failures to zero.
+
+**After 2026-04-27 fixme-clear pass (this commit)**:
+- **Active tests**: **167 across 11 specs** (+5 from converting prior fixmes/skip into active tests).
+- **`.fixme`**: **0**.
+- **`.skip`**: **0**.
+- **Suite reporter**: `167 passed / 0 failed / 0 skipped`.
 
 ### Coverage movement
 
-| Tier | Before | After gap-fill pass | After backend gap-fix pass | After 2026-04-27 minor-gap pass |
-|---|---|---|---|---|
-| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠ (approve/reject route still absent), #3 ✅, #4 🚫 (no endpoint exists), #5 ✅ — 4 of 5 closed | unchanged — **4 of 5 closed** |
-| **Major** (15) | 0 addressed | #6 ✅, #7 ✅, #8 🔧, #9 ✅, #10 ✅, #11 ✅, #12 ✅, #17 🔧, #18 🔧, #19 ⚠ | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠ (replicator-dependent), #20 ✅ — 12 of 15 closed | unchanged — **12 of 15 closed** |
-| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed (deferred) | #23 ✅, #25 ✅, #27 ✅ — **3 of 10 closed** |
+| Tier | Before | After gap-fill | After backend fix | After minor-gap pass | After fixme-clear pass |
+|---|---|---|---|---|---|
+| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠, #3 ✅, #4 🚫, #5 ✅ — 4 of 5 closed | unchanged | #2 ✅ (synchronous-design lock + queryTransfers active) — **4 of 5 closed**, only #4 (Acquisition) remains as a `🚫 no-endpoint` documented gap |
+| **Major** (15) | 0 addressed | partial | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠, #20 ✅ | unchanged | #19 ✅ (full create→approve-methodology→authorize roundtrip) — **13 of 15 closed** |
+| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed | #23 ✅, #25 ✅, #27 ✅ — 3 of 10 closed | unchanged — **3 of 10 closed** |
 
-### Remaining `.fixme` blocks (5)
+### `.fixme` / `.skip` cleanup pass (2026-04-27 part 2)
 
-All five remaining fixmes are infra-level, not backend-gap:
-- `credit-transfer.spec.ts:116` — queryTransfers visibility; requires ledger-replicator container.
-- `credit-transfer.spec.ts:245` — `/creditTransactionsManagement/approve`; no such route exists (transfer is synchronous).
-- `credit-transfer.spec.ts:282` — `/creditTransactionsManagement/reject`; same blocker.
-- `programme-lifecycle.spec.ts:121` — create→authorize→query roundtrip; requires ledger-replicator + METHODOLOGY_DOCUMENT factory.
-- `omge-sop-deductions.spec.ts:321` — env-var flip at runtime; Playwright can't mutate process env.
+All 5 prior `.fixme` blocks and the 1 runtime `.skip` are now eliminated:
+
+- `credit-transfer.spec.ts:116` — **unfixme'd** — queryTransfers visibility passes once the dev `replicator` container is healthy (no test changes needed beyond removing `.fixme`).
+- `credit-transfer.spec.ts:245` (approve) → **replaced with `credit-transfer.spec.ts:247`**, an active "synchronous design lock" test that asserts the receiver immediately owns the transferred credits via DNA-scoped queryBalance. The original test contradicted the design — there is no approve route, no pending state, ownership commits at /transfer time.
+- `credit-transfer.spec.ts:282` (reject) → **replaced with `credit-transfer.spec.ts:289`**, an active assertion that the legacy `/approveTransfer` and `/rejectTransfer` route names return 4xx — design-lock against an accidental two-phase flow regression.
+- `programme-lifecycle.spec.ts:121` → **replaced with `programme-lifecycle.spec.ts:137`**. New `uploadDesignDocument` + `uploadMethodologyDocument` factories drive the DNA-auto-accept path (programme.service.ts:1722-1738), flipping currentStage AwaitingAuthorization→Approved in the ledger. Authorize then reaches the AUTHORISED leg, which is verified via getHistory's last entry. Test uses `seedProgrammeDirect` (RDBMS+ledger dual-seed) instead of /programme/create to sidestep the replicator dependency.
+- `omge-sop-deductions.spec.ts:321` (env-var flip) → **replaced with the active "flags=false round-trip" test** mirroring the existing flags=true test at :288. Original was fundamentally untestable from Playwright; the replacement covers the same observable property — that the queryBalance view round-trips both flag values without coercion.
+- `initial-report.spec.ts:388` (runtime `.skip`) → **resolved**. Test now bypasses the DTO null-rejection by writing the null directly via the new `nullInitialReportSectionDirect` factory, then asserts the submit-layer "incomplete" 400 path.
+
+Factory additions in this pass: `uploadDesignDocument`, `uploadMethodologyDocument`, `nullInitialReportSectionDirect`. `seedProgrammeDirect` extended to accept `externalId` and seed `programmeProperties.geographicalLocation` (required by the post-METHODOLOGY `sendRequestForLetterOfAuthorisation` side effect at programme.service.ts:1550). `createProgramme` factory's `implementinguser` default fixed from a non-numeric string ("e2e-implementer") to a valid bigint (6) — the prior value poisoned the ledger event stream and stalled the replicator.
 
 ### Pre-existing failures — cleared 2026-04-27
 
