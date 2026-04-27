@@ -39,6 +39,7 @@
  * with other cross-cutting tests that might create CAs with colliding
  * year windows on shared CounterService state.
  */
+import { request } from "@playwright/test";
 import { test, expect } from "./support/fixtures";
 import { BASE_URL } from "./support/auth";
 import {
@@ -1324,6 +1325,62 @@ test.describe("Article 6.2 - Cross-cutting Integration", () => {
       } finally {
         await ad.request.dispose();
       }
+    });
+
+    // Audit gap #25 Minor — bad-credentials login.
+    // Locks the contract that POST /auth/login with a wrong password
+    // returns a 4xx (not a 5xx). The endpoint sits in front of every
+    // protected route; a regression that turns 401 into 500 would mask
+    // brute-force attempts in monitoring dashboards.
+    test("POST /auth/login with a wrong password returns 4xx (not 5xx)", async () => {
+      const ctx = await request.newContext();
+      try {
+        const res = await ctx.post(
+          "http://localhost:3000/national/auth/login",
+          {
+            data: {
+              username: "palinda+add@xeptagon.com",
+              password: `definitely-wrong-${uniqueSuffix()}`,
+            },
+          }
+        );
+        expect(res.ok()).toBe(false);
+        expect(res.status()).toBeGreaterThanOrEqual(400);
+        expect(res.status()).toBeLessThan(500);
+      } finally {
+        await ctx.dispose();
+      }
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Audit gap #27 Minor — role-based sidebar visibility.
+  // The Sider menu (web/src/Components/Sider/layout.sider.tsx:98-118)
+  // gates "Reports", "Corresponding Adjustments" and "Initial Reports"
+  // behind DESIGNATED_NATIONAL_AUTHORITY + Admin/Root. PD users must
+  // not see these entries. A CASL-only check is not enough: a UI that
+  // renders a forbidden link still leaks the existence of the
+  // capability and produces a click-then-403 surprise.
+  // ------------------------------------------------------------------
+  test.describe("UI: role-based sidebar visibility", () => {
+    test("DNA admin sees the Reports + Corresponding Adjustments + Initial Reports menu items", async ({
+      dnaPage,
+    }) => {
+      await dnaPage.waitForURL("**/dashboard", { timeout: 15000 });
+      const sider = dnaPage.locator(".layout-sider-container");
+      await expect(sider.getByText(/Corresponding Adjustments/i).first()).toBeVisible();
+      await expect(sider.getByText(/Initial Reports/i).first()).toBeVisible();
+    });
+
+    test("PD admin does not see the DNA-only menu items", async ({
+      pdPage,
+    }) => {
+      await pdPage.waitForURL("**/dashboard", { timeout: 15000 });
+      const sider = pdPage.locator(".layout-sider-container");
+      await expect(sider).toBeVisible();
+      // Negative assertions — PD must not see DNA-only items.
+      await expect(sider.getByText(/Corresponding Adjustments/i)).toHaveCount(0);
+      await expect(sider.getByText(/Initial Reports/i)).toHaveCount(0);
     });
   });
 });

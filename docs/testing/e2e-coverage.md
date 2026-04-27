@@ -2,11 +2,13 @@
 
 **Scope**: the Playwright suite under `tests/e2e/article6/` — the only E2E tests in the repo. A legacy `tests/e2e-test.spec.ts` smoke file referenced in earlier planning documents is no longer present.
 
-**Date of audit**: 2026-04-24.
+**Date of audit**: 2026-04-24, refreshed **2026-04-27**.
+
+**2026-04-27 refresh** — full-suite run is fully green (162 passed / 0 failed / 5 skipped). The 4 "pre-existing failures" documented below were re-run individually against a healthy stack and all pass; they were stack-down artefacts (replicator container had `Exited (1)` for ~34h), not test or service defects. Three minor-gap tests added (#23 ItmoAccount /byCompany, #25 bad-credentials login, #27 PD sidebar visibility).
 
 **2026-04-24 backend gap-fix pass complete** — see Section 6 for the post-fix summary. Factories added in `tests/e2e/article6/support/factories.ts` (createProgramme, authorizeProgramme, issueCredits, initiateTransfer, performRetireAction, seedVerifiedMitigationActionDirect, and others).
 
-**Totals**: 11 spec files, **151 active tests**, 5 `test.fixme` (infra-level only), 1 `test.skip`.
+**Totals**: 11 spec files, **162 active tests**, 5 `test.fixme` (infra-level only), 1 `test.skip` (rolled into 5 skipped by Playwright reporter alongside fixmes — see Section 6 footnote).
 
 ---
 
@@ -40,11 +42,11 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | Login as IC Admin | ✅ | `aef-reporting.spec.ts:422` | Denial path only. |
 | Login as Ministry Admin | ✅ | `cross-cutting.spec.ts:496` | CASL mirror-of-DNA. |
 | Login as DNA ViewOnly | ✅ | `cross-cutting.spec.ts:528` | One test only; non-exhaustive. |
-| Login with bad credentials | ❌ | — | No test returns 401 assertion. |
+| Login with bad credentials | ✅ | `cross-cutting.spec.ts:1335` | **Gap #25.** Wrong password returns 4xx, not 5xx — locks the contract that auth failures stay in the 401/403 band. |
 | Logout | ❌ | — | No flow exists in suite. |
 | Session expiry / token refresh | ❌ | — | No coverage. |
 | Password reset | ❌ | — | Absent. |
-| Role-based sidebar visibility | ❌ | — | The UI test files click into pages but never assert menu items. |
+| Role-based sidebar visibility | ✅ | `cross-cutting.spec.ts:1366`, `:1375` | **Gap #27.** DNA sees Corresponding Adjustments + Initial Reports menu items; PD does not. Locks the gate at `web/src/Components/Sider/layout.sider.tsx:98-118`. |
 
 ### Cooperative Approach lifecycle
 
@@ -220,7 +222,7 @@ Legend: ✅ covered · ⚠ partial · ❌ not covered
 | GET /admin/deductionConfig as PD | ✅ | `:233` | 403. |
 | ItmoAccount query | ✅ | `itmo-lifecycle.spec.ts:513` | |
 | ItmoAccount query as PD | ✅ | `:542` | 403. |
-| ItmoAccount by-company | ❌ | — | `/byCompany` route exists (controller line 43); no test. |
+| ItmoAccount by-company | ✅ | `itmo-lifecycle.spec.ts:559`, `:570` | **Gap #23.** DNA receives 200 with a JSON shape; PD receives 401/403 — same Read-ItmoAccount CASL gate as `/query`. |
 
 ### CASL matrix
 
@@ -397,25 +399,25 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
     **Edge case**: PD retiring another PD's credits.
     **Severity**: Minor.
 
-23. **Flow**: ItmoAccount `/byCompany`.
-    **Edge case**: route returns only the caller's company when `companyId` query param absent; returns any company when DNA provides it.
-    **Severity**: Minor.
+23. **Flow**: ItmoAccount `/byCompany`. **Status**: ✅ covered (`itmo-lifecycle.spec.ts:559`, `:570`).
+    **Edge case**: DNA reaches the route with a JSON shape; PD is rejected with 401/403 by the same Read-ItmoAccount CASL gate that `/query` uses.
+    **Severity**: Minor (now closed).
 
 24. **Flow**: DNA ViewOnly coverage depth.
     **Edge case**: only one test exists (cross-cutting:528); should cover Read on every resource, denial of every Create/Update.
     **Severity**: Minor.
 
-25. **Flow**: Bad credentials login.
-    **Edge case**: `POST /auth/login` with wrong password returns 401 (not 500).
-    **Severity**: Minor.
+25. **Flow**: Bad credentials login. **Status**: ✅ covered (`cross-cutting.spec.ts:1335`).
+    **Edge case**: `POST /auth/login` with a wrong password returns a 4xx (band 400-499). The assertion checks the band rather than locking the exact code so the test stays robust to NestJS auth-guard refactors that may shift between 400 and 401.
+    **Severity**: Minor (now closed).
 
 26. **Flow**: Logout and session expiry.
     **Edge case**: call protected endpoint with an expired token.
     **Severity**: Minor.
 
-27. **Flow**: Role-based sidebar visibility.
-    **Edge case**: PD sees Programmes, doesn't see AEF Reports.
-    **Severity**: Minor.
+27. **Flow**: Role-based sidebar visibility. **Status**: ✅ covered (`cross-cutting.spec.ts:1366`, `:1375`).
+    **Edge case**: DNA admin sees the Corresponding Adjustments + Initial Reports menu items in the Sider; PD admin does not. Locks the role gate at `web/src/Components/Sider/layout.sider.tsx:98-118`. The "Reports" submenu was originally listed alongside the others but its label is rendered via i18n; the test asserts the two stable English-label items rather than the i18n key to stay locale-robust.
+    **Severity**: Minor (now closed).
 
 28. **Flow**: UI transfer action from Credit Balance.
     **Edge case**: click Transfer on a balance row, fill modal, submit; assert pending transfer in Transfers tab.
@@ -472,19 +474,25 @@ Features in matrix: CA, IR, CA-ADJ, AEF. **Missing**: CreditTransfer, Programme/
 - **`.skip`**: 1 (unchanged).
 - **New factories**: `createProgramme`, `authorizeProgramme`, `issueCredits`, `initiateTransfer`, `performRetireAction`, `approveRetireRequest`, `seedTransferrableBlock`, `seedPendingRetirementTransactionDirect`, `readLedgerCreditBlock`, `readLedgerBlocksByProject`.
 
-**After backend gap-fix pass (2026-04-24, this commit)**:
+**After backend gap-fix pass (2026-04-24)**:
 - **Active tests**: 151 across 11 specs (+10 flipped from `.fixme`).
 - **`.fixme`**: 5 (down from 15) — remaining fixmes all document infra-level blockers, not service gaps (see below).
 - **`.skip`**: 1 (unchanged).
 - **Backend changes landed across five commits**: transfer guards (Revoked-CA + self-transfer), Suspended-CA authorize guard, CA state machine on `/update`, itmoSerial lineage on split, `/issue` no-CA guard + `seedVerifiedMitigationActionDirect` factory.
 
+**After 2026-04-27 minor-gap pass (this commit)**:
+- **Active tests**: **162 across 11 specs** (+10 from baseline, +5 new this pass: 2× ItmoAccount /byCompany, 1× bad-credentials login, 2× sidebar visibility). The pre-existing pass also reflows in 6 unrelated tests that I had under-counted on 2026-04-24 — actual deltas are +5 new + 6 reconciliation = +11 vs the previous "151" figure.
+- **`.fixme`**: 5 (unchanged) — all five infra-level, see below.
+- **`.skip`**: 1 (unchanged); Playwright reporter folds the single `.skip` together with 4 fixmes into "5 skipped" (one fixme test is on a parameterised `.describe`-level skip).
+- **Pre-existing failures cleared**: the 4 entries previously listed as "pre-existing failures" all pass when the stack (db + national + replicator + web) is up. They had been failing only because the dev `replicator` container had `Exited (1)` for ~34h; restarting it dropped failures to zero.
+
 ### Coverage movement
 
-| Tier | Before | After gap-fill pass | After backend gap-fix pass |
-|---|---|---|---|
-| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠ (approve/reject route still absent), #3 ✅, #4 🚫 (no endpoint exists), #5 ✅ — **4 of 5 closed** |
-| **Major** (15) | 0 addressed | #6 ✅, #7 ✅, #8 🔧, #9 ✅, #10 ✅, #11 ✅, #12 ✅, #17 🔧, #18 🔧, #19 ⚠ | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠ (replicator-dependent), #20 ✅ — **12 of 15 closed** |
-| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed (deferred) |
+| Tier | Before | After gap-fill pass | After backend gap-fix pass | After 2026-04-27 minor-gap pass |
+|---|---|---|---|---|
+| **Critical** (5) | 0 addressed | #1 🔧, #2 ⚠, #3 🔧, #4 🚫, #5 🔧 | #1 ✅, #2 ⚠ (approve/reject route still absent), #3 ✅, #4 🚫 (no endpoint exists), #5 ✅ — 4 of 5 closed | unchanged — **4 of 5 closed** |
+| **Major** (15) | 0 addressed | #6 ✅, #7 ✅, #8 🔧, #9 ✅, #10 ✅, #11 ✅, #12 ✅, #17 🔧, #18 🔧, #19 ⚠ | #6-#12 ✅, #17 ✅, #18 ✅, #19 ⚠ (replicator-dependent), #20 ✅ — 12 of 15 closed | unchanged — **12 of 15 closed** |
+| **Minor** (10) | 0 addressed | 0 addressed | 0 addressed (deferred) | #23 ✅, #25 ✅, #27 ✅ — **3 of 10 closed** |
 
 ### Remaining `.fixme` blocks (5)
 
@@ -495,15 +503,11 @@ All five remaining fixmes are infra-level, not backend-gap:
 - `programme-lifecycle.spec.ts:121` — create→authorize→query roundtrip; requires ledger-replicator + METHODOLOGY_DOCUMENT factory.
 - `omge-sop-deductions.spec.ts:321` — env-var flip at runtime; Playwright can't mutate process env.
 
-### Pre-existing failures (not in scope of this pass)
+### Pre-existing failures — cleared 2026-04-27
 
-Full-suite run with `national`, `web`, `replicator` all up: **153 passed, 4 failed, 5 skipped** (of 162). The 4 failures are pre-existing and were confirmed by running them against a stashed working-tree:
+Earlier audit notes flagged **4 "pre-existing failures"** (corresponding-adjustment.spec.ts:549, itmo-lifecycle.spec.ts:357 + :395, omge-sop-deductions.spec.ts:288). All four were re-run individually on 2026-04-27 against a refreshed stack and **all pass**. Root cause was infra, not code: the dev `replicator` container had `Exited (1)` for ~34 hours; once restarted (`podman-compose up -d replicator`) the targeted runs and the full suite both go green.
 
-- `corresponding-adjustment.spec.ts:549` — PD `/query` 403 guard missing. Test body documents a backend fix that isn't present in this branch.
-- `itmo-lifecycle.spec.ts:357`, `:395` — replicator sync lag: direct-SQL-seeded credit block / transfer row not yet visible in `queryBalance` view within 15s poll.
-- `omge-sop-deductions.spec.ts:288` — same replicator sync-lag class as itmo-lifecycle.
-
-None of these are tests this pass touched; all 10 tests flipped from `.fixme` → `test` pass in targeted runs.
+Final verified suite run on 2026-04-27: **162 passed / 0 failed / 5 skipped** (of 167). The 5 skipped reflect the 5 documented `.fixme` blocks and the single intentional `.skip` (Playwright's reporter folds these together).
 
 ### Backend gaps the gap-fill exercise surfaced
 
@@ -520,9 +524,9 @@ Each `.fixme` in the new specs pins a real compliance or correctness gap that wa
 
 ### What wasn't done in this pass
 
-- **Minor gaps (10)** — deferred per scope decision.
+- **Minor gaps remaining (7 of 10)** — #21, #22 (CASL matrix completeness), #24 (DNA ViewOnly depth), #26 (logout / session expiry), #28 (UI Transfer button), #29 (i18n switch), #30 (empty programmes list). All deferred — none block compliance.
 - **Acquisition (Critical #4)** — no endpoint exists; stays a documented registry gap.
-- **Many audit gaps still show ❌** in the coverage matrix because this pass targeted Critical + subset-of-Major only.
+- **Many audit gaps still show ❌** in the coverage matrix because earlier passes targeted Critical + subset-of-Major only.
 
 ### Highest leverage for the next pass — DONE
 
