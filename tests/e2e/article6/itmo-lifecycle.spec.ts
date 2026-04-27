@@ -551,6 +551,29 @@ test.describe("ITMO Lifecycle - Article 6.2", () => {
       expect(res.ok()).toBe(false);
       expect([401, 403]).toContain(res.status());
     });
+
+    // Audit gap #23 Minor — `/byCompany` route at
+    // backend/services/src/national-api/itmo-account.controller.ts:43.
+    // Same Read ItmoAccount CASL guard as `/query`; should reach the
+    // service for DNA and reject PD with 403.
+    test("ItmoAccount /byCompany returns 200 for DNA with a JSON body", async ({
+      apiDna,
+    }) => {
+      const res = await apiDna.get("national/itmoAccount/byCompany?companyId=1");
+      await expectOk(res, "DNA /byCompany");
+      const body = await apiDna.json<any>(res);
+      // Service may return either an array directly or {data: [...]}.
+      const rows = Array.isArray(body) ? body : body?.data ?? body;
+      expect(rows === null || rows === undefined || Array.isArray(rows) || typeof rows === "object").toBe(true);
+    });
+
+    test("PD cannot call ItmoAccount /byCompany (Dec 2/CMA.3 para 29 scope)", async ({
+      apiPd,
+    }) => {
+      const res = await apiPd.get("national/itmoAccount/byCompany?companyId=1");
+      expect(res.ok()).toBe(false);
+      expect([401, 403]).toContain(res.status());
+    });
   });
 
   // ------------------------------------------------------------------
