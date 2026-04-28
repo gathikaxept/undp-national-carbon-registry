@@ -1070,6 +1070,22 @@ const ProjectDetailsViewComponent = (props: any) => {
     }
   );
 
+  // Article 6.2 cooperative-approach linkage. Surfaced from the
+  // project_entity row (added to the project_details view in this
+  // commit). Visible whenever the row carries a CA id; the labels
+  // are shown verbatim because the i18n keys haven't been added.
+  if (data?.cooperativeApproachId) {
+    generalInfo["Cooperative Approach"] = (
+      <Tag color="blue">{data.cooperativeApproachId}</Tag>
+    );
+  }
+  if (data?.authorizationPurpose) {
+    generalInfo["Authorization Purpose"] = data.authorizationPurpose;
+  }
+  if (data?.acquiringPartyCountryCode) {
+    generalInfo["Acquiring Party"] = data.acquiringPartyCountryCode;
+  }
+
   const getContactPersonInfo = () => {
     const nameText = t("projectDetailsView:contactName");
     const emailText = t("projectDetailsView:contactEmail");
