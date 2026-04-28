@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useConnection } from "../../Context/ConnectionContext/connectionContext";
 import { Button, Col, Form, Input, Row, message } from "antd";
+import "./initialReports.scss";
 
 const { TextArea } = Input;
 
@@ -40,25 +41,15 @@ const CreateInitialReport = () => {
   };
 
   return (
-    <div style={{ padding: "0 24px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: "1.4rem", fontWeight: 600 }}>
-          Generate Initial Report
-        </div>
-        <div style={{ fontSize: "0.875rem", color: "rgba(58,53,65,0.6)" }}>
+    <div className="initial-reports-container">
+      <div className="title-bar">
+        <div className="body-title">Generate Initial Report</div>
+        <div className="body-sub-title">
           Per Decision 2/CMA.3 para. 18 — required before first ITMO
           authorization under a cooperative approach
         </div>
       </div>
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: 8,
-          padding: 24,
-          boxShadow:
-            "0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px rgba(0,0,0,0.14), 0px 1px 3px rgba(0,0,0,0.12)",
-        }}
-      >
+      <div className="content-card">
         <Form form={form} layout="vertical" onFinish={onFinish}>
           <Row gutter={24}>
             <Col span={12}>
