@@ -260,6 +260,33 @@ INSERT INTO credit_blocks_entity (
 echo "  + 3 credit blocks materialised (Holding 930, OMGE 20, SOP 50)"
 
 # ---------------------------------------------------------------------
+# Mirror programmes into the LEDGER `project` table. The credit-transfer
+# and retire services do `getAndUpdateTx` against this ledger keyed by
+# refId == projectRefId. credit_blocks_entity rows above carry
+# projectRefId='<programmeId>', so each programme needs a matching
+# ledger project row. Without this, transfer/retire would 400 with
+# "project.programmeNotExistWIthId<id>" even though the credit blocks
+# are present in the RDBMS. Mirrors the seedTransferrableBlock factory
+# pattern from tests/e2e/article6/support/factories.ts:394.
+# ---------------------------------------------------------------------
+echo "[seed] Seeding ledger project rows for transfer/retire flows"
+seed_ledger_project() {
+  local pid=$1 title=$2 issued=$3 balance=$4
+  local data=$(cat <<JSON
+{"refId":"$pid","title":"$title","companyId":1,"independentCertifiers":[],"sector":"Energy","sectoralScope":"1","txType":"1","txRef":"seed-init","txTime":$NOW_MS,"createTime":$NOW_MS,"updateTime":$NOW_MS,"creditEst":1000,"creditBalance":$balance,"creditRetired":0,"creditTransferred":0,"creditIssued":$issued,"creditChange":0,"cooperativeApproachId":"$CA1","authorizationPurpose":"UseTowardsNDC"}
+JSON
+)
+  podman exec "$DB_CONTAINER" psql -U root -d "$EVENTS_DB" -c \
+    "INSERT INTO project (data, meta) VALUES ('$(echo "$data" | sed "s/'/''/g")'::jsonb, '{}'::jsonb);" \
+    > /dev/null
+}
+seed_ledger_project "$PA"    "Solar PV Mini-grid — Awaiting Authorization" 0    0
+seed_ledger_project "$PB"    "Mangrove Reforestation — Approved"           0    0
+seed_ledger_project "$PC"    "Cookstove Distribution — Authorised"         0    0
+seed_ledger_project "$PD_ID" "Wind Farm — Authorised + Issued"             1000 1000
+echo "  + 4 ledger project rows"
+
+# ---------------------------------------------------------------------
 # Mirror the four programmes into project_entity so the UI's
 # "Project Details" page (/programmeManagement/viewAll →
 # /national/projectManagement/query) sees them. The dev codebase
@@ -272,6 +299,10 @@ echo "  + 3 credit blocks materialised (Holding 930, OMGE 20, SOP 50)"
 echo "[seed] Mirroring programmes -> project_entity for UI list visibility"
 mirror_project() {
   local pid=$1 title=$2 stage=$3 issued=$4 balance=$5
+  # ON CONFLICT DO UPDATE so this step is idempotent against rows the
+  # replicator may already have written (it writes project_entity for
+  # programmes that have been through the methodology+authorize event
+  # chain — i.e. our 003 + 004 — once the replicator catches up).
   podman exec "$DB_CONTAINER" psql -U root -d carbondev -c "
 INSERT INTO project_entity (
   \"refId\",\"title\",\"companyId\",\"independentCertifiers\",\"projectProposalStage\",
@@ -284,7 +315,15 @@ INSERT INTO project_entity (
   (EXTRACT(EPOCH FROM NOW())::bigint*1000),(EXTRACT(EPOCH FROM NOW())::bigint*1000),
   1000,$balance,$issued,0,
   '$CA1','UseTowardsNDC'
-);" > /dev/null
+)
+ON CONFLICT (\"refId\") DO UPDATE SET
+  \"title\" = EXCLUDED.\"title\",
+  \"projectProposalStage\" = EXCLUDED.\"projectProposalStage\",
+  \"creditEst\" = EXCLUDED.\"creditEst\",
+  \"creditBalance\" = EXCLUDED.\"creditBalance\",
+  \"creditIssued\" = EXCLUDED.\"creditIssued\",
+  \"cooperativeApproachId\" = EXCLUDED.\"cooperativeApproachId\",
+  \"authorizationPurpose\" = EXCLUDED.\"authorizationPurpose\";" > /dev/null
 }
 mirror_project "$PA"     "Solar PV Mini-grid — Awaiting Authorization" "PENDING"    0    0
 mirror_project "$PB"     "Mangrove Reforestation — Approved"           "APPROVED"   0    0
