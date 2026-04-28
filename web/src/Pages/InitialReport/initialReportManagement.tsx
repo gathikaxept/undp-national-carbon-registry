@@ -5,6 +5,7 @@ import { useUserContext } from "../../Context/UserInformationContext/userInforma
 import { Button, Row, Col, Table, Tag, message } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { CompanyRole } from "../../Definitions/Enums/company.role.enum";
+import "./initialReports.scss";
 
 const statusColors: Record<string, string> = {
   Draft: "default",
@@ -47,18 +48,6 @@ const InitialReportManagement = () => {
       render: (ts: string) =>
         ts ? new Date(Number(ts)).toLocaleDateString() : "—",
     },
-    {
-      title: "Action",
-      key: "action",
-      render: (_: any, row: any) => (
-        <Button
-          type="link"
-          onClick={() => navigate(`/initialReports/edit/${row.reportId}`)}
-        >
-          {row.status === "Published" ? "View" : "Edit / Submit"}
-        </Button>
-      ),
-    },
   ];
 
   const fetchData = async (page: number, size: number) => {
@@ -85,30 +74,18 @@ const InitialReportManagement = () => {
   }, [currentPage, pageSize]);
 
   return (
-    <div style={{ padding: "0 24px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: "1.4rem", fontWeight: 600 }}>
-          Initial Reports
-        </div>
-        <div style={{ fontSize: "0.875rem", color: "rgba(58,53,65,0.6)" }}>
+    <div className="initial-reports-container">
+      <div className="title-bar">
+        <div className="body-title">Initial Reports</div>
+        <div className="body-sub-title">
           Article 6.2 initial reports required per Decision 2/CMA.3 para. 18
           before first ITMO authorization
         </div>
       </div>
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: 8,
-          padding: 24,
-          boxShadow:
-            "0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px rgba(0,0,0,0.14), 0px 1px 3px rgba(0,0,0,0.12)",
-        }}
-      >
+      <div className="content-card">
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col>
-            <div style={{ fontSize: "1rem", fontWeight: 600 }}>
-              All Initial Reports
-            </div>
+            <div className="table-title">All Initial Reports</div>
           </Col>
           <Col>
             {canCreate && (
@@ -136,6 +113,11 @@ const InitialReportManagement = () => {
               setPageSize(size || 10);
             },
           }}
+          onRow={(record) => ({
+            onClick: () =>
+              navigate(`/initialReports/view/${record.reportId}`),
+            style: { cursor: "pointer" },
+          })}
         />
       </div>
     </div>
