@@ -52,6 +52,7 @@ import CaManagement from "./Pages/CorrespondingAdjustment/caManagement";
 import CaCalculation from "./Pages/CorrespondingAdjustment/caCalculation";
 import InitialReportManagement from "./Pages/InitialReport/initialReportManagement";
 import CreateInitialReport from "./Pages/InitialReport/createInitialReport";
+import EditInitialReport from "./Pages/InitialReport/editInitialReport";
 
 const App = () => {
   const { t } = useTranslation(["common"]);
@@ -203,6 +204,10 @@ const App = () => {
                     <Route
                       path="create"
                       element={<CreateInitialReport />}
+                    />
+                    <Route
+                      path="edit/:reportId"
+                      element={<EditInitialReport />}
                     />
                   </Route>
                   <Route
