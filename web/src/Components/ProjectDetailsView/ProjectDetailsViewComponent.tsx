@@ -292,7 +292,7 @@ const ProjectDetailsViewComponent = (props: any) => {
 
   const getPieChartData = (d: ProgrammeSlU) => {
     const authorised =
-      d.projectProposalStage.toString() === ProjectProposalStage.AUTHORISED &&
+      d.projectProposalStage?.toString() === ProjectProposalStage.AUTHORISED &&
       d.creditEst
         ? Number(
             (
@@ -1222,7 +1222,7 @@ const ProjectDetailsViewComponent = (props: any) => {
                     {userInfoState?.userRole !== "ViewOnly" &&
                       userInfoState?.companyRole !== "Certifier" && (
                         <div className="flex-display action-btns">
-                          {data.projectProposalStage.toString() ===
+                          {data.projectProposalStage?.toString() ===
                             ProjectProposalStage.AUTHORISED &&
                             data.creditBalance -
                               (data.creditFrozen ? data.creditFrozen : 0) >
