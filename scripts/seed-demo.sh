@@ -260,6 +260,39 @@ INSERT INTO credit_blocks_entity (
 echo "  + 3 credit blocks materialised (Holding 930, OMGE 20, SOP 50)"
 
 # ---------------------------------------------------------------------
+# Mirror the four programmes into project_entity so the UI's
+# "Project Details" page (/programmeManagement/viewAll →
+# /national/projectManagement/query) sees them. The dev codebase
+# carries two parallel project models — the legacy `programme` table
+# populated by /programme/create, and the newer `project_entity`
+# powering the UI's project list. Real production traffic populates
+# both via parallel async writes; the local seed bypass writes
+# project_entity directly.
+# ---------------------------------------------------------------------
+echo "[seed] Mirroring programmes -> project_entity for UI list visibility"
+mirror_project() {
+  local pid=$1 title=$2 stage=$3 issued=$4 balance=$5
+  podman exec "$DB_CONTAINER" psql -U root -d carbondev -c "
+INSERT INTO project_entity (
+  \"refId\",\"title\",\"companyId\",\"independentCertifiers\",\"projectProposalStage\",
+  \"sector\",\"sectoralScope\",\"projectAuthorizationTime\",\"txType\",\"txTime\",
+  \"createTime\",\"updateTime\",\"creditEst\",\"creditBalance\",\"creditIssued\",\"creditChange\",
+  \"cooperativeApproachId\",\"authorizationPurpose\"
+) VALUES (
+  '$pid','$title',1,'{}','$stage',
+  'Energy','1',$([ "$stage" = "AUTHORISED" ] && echo "$NOW_MS" || echo "NULL"),'0',(EXTRACT(EPOCH FROM NOW())::bigint*1000),
+  (EXTRACT(EPOCH FROM NOW())::bigint*1000),(EXTRACT(EPOCH FROM NOW())::bigint*1000),
+  1000,$balance,$issued,0,
+  '$CA1','UseTowardsNDC'
+);" > /dev/null
+}
+mirror_project "$PA"     "Solar PV Mini-grid — Awaiting Authorization" "PENDING"    0    0
+mirror_project "$PB"     "Mangrove Reforestation — Approved"           "APPROVED"   0    0
+mirror_project "$PC"     "Cookstove Distribution — Authorised"         "AUTHORISED" 0    0
+mirror_project "$PD_ID"  "Wind Farm — Authorised + Issued"             "AUTHORISED" 1000 1000
+echo "  + 4 project_entity rows"
+
+# ---------------------------------------------------------------------
 # Corresponding Adjustment
 # ---------------------------------------------------------------------
 YEAR=$(date +%Y)
