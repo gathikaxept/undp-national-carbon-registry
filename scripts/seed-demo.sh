@@ -232,10 +232,22 @@ echo "  $PD_ID Authorised + issued 1000 credits"
 # Seed three blocks so the Credit Balance page has demo content
 # reflecting the OMGE / SOP deductions.
 SEED_YEAR=$(date +%Y)
+# itmoSerial: Dec 6/CMA.4 Annex I para 5 structured serial — party,
+# itmoType, vintage, activityId, range. Stable across splits per
+# Draft -/CMA.5 ¶132.
 ITMO_SERIAL_BASE="NG-tCO2e-1-$PD_ID-$SEED_YEAR"
 ITMO_HOLDING="$ITMO_SERIAL_BASE-1-930"
 ITMO_OMGE="$ITMO_SERIAL_BASE-931-950"
 ITMO_SOP="$ITMO_SERIAL_BASE-951-1000"
+# serialNumber: must follow composeNumberedSerialNumber's 7-part shape
+# `<prefix>-<start>-<end>-<vintage>` (prefix is 4 dash-separated parts)
+# so splitCreditBlockSerialNumber/getCreditBlockId can parse it during
+# transfer or partial-retire flows. A flat label like "SN-DEMO-D-HOLD"
+# parses to NaN start/end and breaks split → "SN-...-NaN-NaN-undefined".
+SN_PREFIX="NG-tCO2e-1-$PD_ID"
+SN_HOLDING="$SN_PREFIX-1-930-$SEED_YEAR"
+SN_OMGE="$SN_PREFIX-931-950-$SEED_YEAR"
+SN_SOP="$SN_PREFIX-951-1000-$SEED_YEAR"
 podman exec "$DB_CONTAINER" psql -U root -d carbondev -c "
 INSERT INTO credit_blocks_entity (
   \"creditBlockId\",\"txRef\",\"txType\",\"txTime\",\"ownerCompanyId\",
@@ -245,15 +257,15 @@ INSERT INTO credit_blocks_entity (
   \"accountType\",\"omgeDeductedAtIssuance\",\"sopDeductedAtIssuance\"
 ) VALUES
   ('BLK-DEMO-D-HOLD','seed-init','2',(EXTRACT(EPOCH FROM NOW())::bigint*1000),1,
-   '$PD_ID','SN-DEMO-D-HOLD','$ITMO_HOLDING','$SEED_YEAR',
+   '$PD_ID','$SN_HOLDING','$ITMO_HOLDING','$SEED_YEAR',
    930,TRUE,0,(EXTRACT(EPOCH FROM NOW())::bigint*1000),
    '$CA1','UseTowardsNDC','Holding',TRUE,TRUE),
   ('BLK-DEMO-D-OMGE','seed-init','2',(EXTRACT(EPOCH FROM NOW())::bigint*1000),1,
-   '$PD_ID','SN-DEMO-D-OMGE','$ITMO_OMGE','$SEED_YEAR',
+   '$PD_ID','$SN_OMGE','$ITMO_OMGE','$SEED_YEAR',
    20,TRUE,0,(EXTRACT(EPOCH FROM NOW())::bigint*1000),
    '$CA1','UseTowardsNDC','CancellationOMGE',TRUE,TRUE),
   ('BLK-DEMO-D-SOP','seed-init','2',(EXTRACT(EPOCH FROM NOW())::bigint*1000),1,
-   '$PD_ID','SN-DEMO-D-SOP','$ITMO_SOP','$SEED_YEAR',
+   '$PD_ID','$SN_SOP','$ITMO_SOP','$SEED_YEAR',
    50,TRUE,0,(EXTRACT(EPOCH FROM NOW())::bigint*1000),
    '$CA1','UseTowardsNDC','CancellationSOP',TRUE,TRUE);
 " > /dev/null
@@ -285,6 +297,30 @@ seed_ledger_project "$PB"    "Mangrove Reforestation — Approved"           0  
 seed_ledger_project "$PC"    "Cookstove Distribution — Authorised"         0    0
 seed_ledger_project "$PD_ID" "Wind Farm — Authorised + Issued"             1000 1000
 echo "  + 4 ledger project rows"
+
+# ---------------------------------------------------------------------
+# Mirror credit blocks into the LEDGER `credit_blocks` table. The
+# credit-transfer / retire-request services do `getAndUpdateTx` against
+# this ledger keyed by creditBlockId. Without this, transfer/retire
+# would 400 with "project.creditBlockNotExistWIthCreditBlockId<id>"
+# even though credit_blocks_entity (RDBMS) was just populated above.
+# Mirrors the seedTransferrableBlock factory pattern from
+# tests/e2e/article6/support/factories.ts:427.
+# ---------------------------------------------------------------------
+seed_ledger_credit_block() {
+  local block_id=$1 sn=$2 itmo=$3 amount=$4 account=$5
+  local data=$(cat <<JSON
+{"creditBlockId":"$block_id","txRef":"seed-init","txType":"2","txTime":$NOW_MS,"ownerCompanyId":1,"projectRefId":"$PD_ID","serialNumber":"$sn","itmoSerial":"$itmo","vintage":"$SEED_YEAR","creditAmount":$amount,"isNotTransferred":true,"reservedCreditAmount":0,"createTime":$NOW_MS,"accountType":"$account","authorizationPurpose":"UseTowardsNDC","cooperativeApproachId":"$CA1","omgeDeductedAtIssuance":true,"sopDeductedAtIssuance":true,"transactionRecords":[]}
+JSON
+)
+  podman exec "$DB_CONTAINER" psql -U root -d "$EVENTS_DB" -c \
+    "INSERT INTO credit_blocks (data, meta) VALUES ('$(echo "$data" | sed "s/'/''/g")'::jsonb, '{}'::jsonb);" \
+    > /dev/null
+}
+seed_ledger_credit_block "BLK-DEMO-D-HOLD" "$SN_HOLDING" "$ITMO_HOLDING" 930 "Holding"
+seed_ledger_credit_block "BLK-DEMO-D-OMGE" "$SN_OMGE"    "$ITMO_OMGE"     20 "CancellationOMGE"
+seed_ledger_credit_block "BLK-DEMO-D-SOP"  "$SN_SOP"     "$ITMO_SOP"      50 "CancellationSOP"
+echo "  + 3 ledger credit_blocks rows"
 
 # ---------------------------------------------------------------------
 # Mirror the four programmes into project_entity so the UI's
