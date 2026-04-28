@@ -47,6 +47,18 @@ const InitialReportManagement = () => {
       render: (ts: string) =>
         ts ? new Date(Number(ts)).toLocaleDateString() : "—",
     },
+    {
+      title: "Action",
+      key: "action",
+      render: (_: any, row: any) => (
+        <Button
+          type="link"
+          onClick={() => navigate(`/initialReports/edit/${row.reportId}`)}
+        >
+          {row.status === "Published" ? "View" : "Edit / Submit"}
+        </Button>
+      ),
+    },
   ];
 
   const fetchData = async (page: number, size: number) => {
