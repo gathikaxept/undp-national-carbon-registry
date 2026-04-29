@@ -66,9 +66,14 @@ For each section below, record **Pass / Fail / N/A**, tester initials, and a one
 4. Switch back to `Active` (so downstream tests work).
 5. On `CA-001`'s detail page, attempt `Active → Draft` from the dropdown (Draft isn't in the dropdown options — confirm).
    - Expected: Draft is not selectable from any non-Draft state. Locks Decision 2/CMA.3 ¶1 — terminal/forbidden transitions.
-6. From the list page, click **Add New** → fill title + parties + host → submit → returns to list with new row.
+6. **Negative — terminal transitions** (use a throwaway CA created via Add New, then drive it to Completed/Revoked):
+   - From a Completed CA, attempt `Completed → Active`. Toast: `Cooperative approach <id> is Completed — its lifecycle has ended and its status cannot change. To start a new bilateral arrangement, create a fresh cooperative approach.` (key `cooperativeApproach.transitionFromCompleted`)
+   - From a Revoked CA, attempt any change. Toast: `Cooperative approach <id> was Revoked under Draft -/CMA.5 paras 20-21. Revoked is terminal; no further status changes are permitted.` (key `cooperativeApproach.transitionFromRevoked`)
+   - Force a `revert-to-Draft` via API call against a non-Draft CA. Toast: `Cooperative approach <id> cannot revert from <oldStatus> to Draft. Once a CA leaves Draft, its working version is fixed.` (key `cooperativeApproach.transitionRevertToDraft`)
+7. **Negative — not found.** Navigate to `/cooperativeApproaches/view/CA-DOES-NOT-EXIST`. Toast: `Cooperative approach CA-DOES-NOT-EXIST not found.` (key `cooperativeApproach.notFound`)
+8. From the list page, click **Add New** → fill title + parties + host → submit → returns to list with new row.
 
-**Pass criteria**: 3 seeded rows visible; Active↔Suspended transitions persist; Draft is not a downstream option; Add New creates a new row.
+**Pass criteria**: 3 seeded rows visible; Active↔Suspended transitions persist; Draft is not a downstream option; terminal-state and not-found error toasts surface the new specific text; Add New creates a new row.
 
 ---
 
@@ -97,19 +102,16 @@ For each section below, record **Pass / Fail / N/A**, tester initials, and a one
 2. Click row `002` → detail page. Scroll to General card (right column, lightbulb icon).
    - Expected: **Cooperative Approach: CA-001** and **Authorization Purpose: UseTowardsNDC** at the bottom of the General card.
 3. Click row `003` → detail page. Same Cooperative Approach row visible.
-4. **Test the CA-status guard via API** (no UI for this today). Open a terminal:
-   ```bash
-   TOKEN=$(curl -s -X POST http://localhost:3000/national/auth/login -H 'Content-Type: application/json' -d '{"username":"palinda+add@xeptagon.com","password":"123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-   # Authorize attempt against the Suspended CA-003 — service guard fires
-   curl -s -X PUT http://localhost:3000/national/programme/authorize \
-     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"programmeId":"002"}'
-   ```
-   Expected: 200 success on a programme under CA-001 (Active); attempts under CA-003 would 400 with a "Cooperative approach … is Suspended" message.
+4. **CA-state authorize gates.** Drive these by flipping CA-001's status from the Cooperative Approaches detail page, then attempting to authorise a project linked to it (any non-AUTHORISED row, e.g. `001` PENDING after pushing it to APPROVED).
+   - **Suspended**: set CA-001 → Suspended. Authorize attempt fires toast: `Cooperative approach CA-001 is Suspended. Suspension is temporary; reactivate the cooperative approach (Active) before authorizing programmes under it (Draft -/CMA.5 para 20).` (key `programme.caSuspendedBlocksAuth`)
+   - **Revoked**: set a throwaway CA → Revoked, link a programme to it, attempt authorize. Toast: `Cooperative approach <id> is Revoked. Revoked is terminal; new ITMO authorizations are not permitted (Draft -/CMA.5 para 21). Use a different cooperative approach for this programme.` (key `programme.caRevokedBlocksAuth`)
+   - **Missing IR**: link a programme to CA-002 (whose IR is Draft). Toast: `Cannot authorize ITMOs for cooperative approach CA-002 ("<title>"): submit the Initial Report for this CA first (Initial Reports → CA-002 → Submit). Required by Dec 2/CMA.3 Annex para 18.` (key `programme.noSubmittedIrForCaAuth`)
+   - **Article 6 trade flag without CA**: clear `cooperativeApproachId` on a programme (DB or admin tool) and retry. Toast: `Programme <id> is flagged as Article 6.2 (article6trade=true) but has no cooperativeApproachId. Link it to a cooperative approach before authorizing (Dec 2/CMA.3 Annex para 18).` (key `programme.article6CaRequiredForAuth`)
+   Restore CA-001 to Active so downstream tests pass.
 5. Attempt to authorize an already-authorised programme from the action buttons on `004`'s detail page (button label may be **Authorise** if visible).
    - Expected: 400 with "This project has already been authorised" toast.
 
-**Pass criteria**: General card shows CA + Authorization Purpose on every Article 6.2 project; suspend/revoke and double-authorize all return 4xx.
+**Pass criteria**: General card shows CA + Authorization Purpose on every Article 6.2 project; suspend/revoke/missing-IR/no-CA gates each fire with their specific message; double-authorize is rejected.
 
 ---
 
@@ -143,9 +145,10 @@ For each section below, record **Pass / Fail / N/A**, tester initials, and a one
    - Expected: 200 toast. Sender's Holding block drops to 830. A new 100-credit Holding block appears owned by Org B (visible to DNA via Credits ▸ Credit Balance).
 4. **Switch to DNA Admin** (logout + log in again). Sidebar → **Credits ▸ Credit Balance**. Filter to find the new 100-credit block — confirm projectRefId still `004`.
 5. **Switch to PD Admin (Org A)**. Try to transfer 5000 from a block that has 830. Expected: 400 "notEnoughCreditAmount" toast.
-6. Try to transfer to your own organisation (recipient = Org A). Expected: 400 "self-transfer" rejection.
+6. Try to transfer to your own organisation (recipient = Org A). Expected toast: `You cannot transfer credits to your own organisation. Pick a different recipient.` (key `creditTransaction.selfTransferRejected`)
+7. **Revoked-CA transfer block.** Drive a CA → Revoked, then attempt to transfer a block whose `cooperativeApproachId` matches it. Toast: `Credit block <blockId> was issued under cooperative approach <caId>, which has since been Revoked. ITMO transfers from a Revoked CA are not permitted (Draft -/CMA.5 para 21).` (key `creditTransaction.transferFromRevokedCa`)
 
-**Pass criteria**: synchronous transfer flips ownership immediately; overdraw + self-transfer are rejected.
+**Pass criteria**: synchronous transfer flips ownership immediately; overdraw, self-transfer, and revoked-CA transfer all surface their specific rejection messages.
 
 ---
 
@@ -264,3 +267,7 @@ Section | Pass / Fail / N/A | Notes
 10 UI regression sentinels | |
 
 **Tester**: ____________  **Date**: ____________  **Build SHA**: `git rev-parse HEAD`
+
+---
+
+**Error message provenance.** The English text for every `<key>` reference in §1, §3, §5 lives in `backend/services/libs/shared/src/i18n/en/<namespace>.json` (resolved server-side via `helperService.formatReqMessagesString`). The web-side fallbacks for create/update toasts live in `web/public/locales/i18n/common/<lang>.json` under `cooperativeApproachCreateFailed` / `cooperativeApproachUpdateFailed`. Adding a new locale means translating those JSON files; the throw-sites stay unchanged.

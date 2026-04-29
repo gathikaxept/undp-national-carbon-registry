@@ -102,7 +102,7 @@ export class CooperativeApproachService {
       throw new HttpException(
         this.helperService.formatReqMessagesString(
           "cooperativeApproach.notFound",
-          []
+          [cooperativeApproachId]
         ),
         HttpStatus.NOT_FOUND
       );
@@ -121,7 +121,7 @@ export class CooperativeApproachService {
       throw new HttpException(
         this.helperService.formatReqMessagesString(
           "cooperativeApproach.notFound",
-          []
+          [dto.cooperativeApproachId]
         ),
         HttpStatus.NOT_FOUND
       );
@@ -143,14 +143,31 @@ export class CooperativeApproachService {
       const oldStatus = approach.status;
       const newStatus = dto.status;
       if (oldStatus !== newStatus) {
-        const isTerminalViolation =
-          oldStatus === CooperativeApproachStatus.COMPLETED ||
-          oldStatus === CooperativeApproachStatus.REVOKED;
-        const isRevertToDraft =
-          newStatus === CooperativeApproachStatus.DRAFT;
-        if (isTerminalViolation || isRevertToDraft) {
+        const id = approach.cooperativeApproachId;
+        if (oldStatus === CooperativeApproachStatus.COMPLETED) {
           throw new HttpException(
-            `Invalid cooperative-approach status transition: ${oldStatus} -> ${newStatus}. Completed and Revoked are terminal; status cannot revert to Draft.`,
+            this.helperService.formatReqMessagesString(
+              "cooperativeApproach.transitionFromCompleted",
+              [id]
+            ),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        if (oldStatus === CooperativeApproachStatus.REVOKED) {
+          throw new HttpException(
+            this.helperService.formatReqMessagesString(
+              "cooperativeApproach.transitionFromRevoked",
+              [id]
+            ),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        if (newStatus === CooperativeApproachStatus.DRAFT) {
+          throw new HttpException(
+            this.helperService.formatReqMessagesString(
+              "cooperativeApproach.transitionRevertToDraft",
+              [id, oldStatus]
+            ),
             HttpStatus.BAD_REQUEST
           );
         }

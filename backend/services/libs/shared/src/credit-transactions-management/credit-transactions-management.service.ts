@@ -124,7 +124,10 @@ export class CreditTransactionsManagementService {
       // spurious AEF row / CA-ADJ double-count.
       if (Number(companyId) === Number(creditTransferDto.receiverOrgId)) {
         throw new HttpException(
-          "Cannot transfer credits to the same company (receiverOrgId equals senderCompanyId).",
+          this.helperService.formatReqMessagesString(
+            "creditTransaction.selfTransferRejected",
+            []
+          ),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -174,7 +177,13 @@ export class CreditTransactionsManagementService {
         });
         if (ca && ca.status === CooperativeApproachStatus.REVOKED) {
           throw new HttpException(
-            `Cooperative approach ${creditBlock.cooperativeApproachId} has been revoked; ITMO transfers are no longer permitted (Draft -/CMA.5 para 21).`,
+            this.helperService.formatReqMessagesString(
+              "creditTransaction.transferFromRevokedCa",
+              [
+                creditBlock.creditBlockId,
+                creditBlock.cooperativeApproachId,
+              ]
+            ),
             HttpStatus.BAD_REQUEST
           );
         }
