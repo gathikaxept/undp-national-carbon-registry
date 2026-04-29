@@ -50,8 +50,14 @@ const AddCooperativeApproach = () => {
       }
       navigate("/cooperativeApproaches/viewAll");
     } catch (error) {
+      const fallback = t(
+        isEdit
+          ? "common:cooperativeApproachUpdateFailed"
+          : "common:cooperativeApproachCreateFailed"
+      );
+      const serverMsg = (error as any)?.message;
       message.error(
-        `Failed to ${isEdit ? "update" : "create"} cooperative approach`
+        serverMsg && typeof serverMsg === "string" ? serverMsg : fallback
       );
     } finally {
       setLoading(false);

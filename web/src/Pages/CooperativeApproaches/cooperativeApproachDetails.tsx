@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useConnection } from "../../Context/ConnectionContext/connectionContext";
 import { useUserContext } from "../../Context/UserInformationContext/userInformationContext";
 import {
@@ -26,6 +27,7 @@ const statusColors: Record<string, string> = {
 const CooperativeApproachDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation(["common"]);
   const { get, put } = useConnection();
   const { userInfoState } = useUserContext();
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,12 @@ const CooperativeApproachDetails = () => {
         setData(response.data);
       }
     } catch (error) {
-      message.error("Failed to load cooperative approach");
+      const serverMsg = (error as any)?.message;
+      message.error(
+        serverMsg && typeof serverMsg === "string"
+          ? serverMsg
+          : "Failed to load cooperative approach"
+      );
     } finally {
       setLoading(false);
     }
@@ -67,7 +74,12 @@ const CooperativeApproachDetails = () => {
       message.success("Status updated");
       fetchData();
     } catch (error) {
-      message.error("Failed to update status");
+      const serverMsg = (error as any)?.message;
+      message.error(
+        serverMsg && typeof serverMsg === "string"
+          ? serverMsg
+          : t("common:cooperativeApproachUpdateFailed")
+      );
     } finally {
       setUpdatingStatus(false);
     }

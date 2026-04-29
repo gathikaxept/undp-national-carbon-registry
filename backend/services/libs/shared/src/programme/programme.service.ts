@@ -6430,7 +6430,10 @@ export class ProgrammeService {
     if (program.article6trade) {
       if (!program.cooperativeApproachId) {
         throw new HttpException(
-          "Article 6.2 programmes must be linked to a cooperative approach before authorization (Dec 2/CMA.3 Annex para 18).",
+          this.helperService.formatReqMessagesString(
+            "programme.article6CaRequiredForAuth",
+            [program.programmeId]
+          ),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -6443,16 +6446,28 @@ export class ProgrammeService {
       });
       if (!ca) {
         throw new HttpException(
-          `Cooperative approach ${program.cooperativeApproachId} not found.`,
+          this.helperService.formatReqMessagesString(
+            "programme.caNotFoundForAuth",
+            [program.cooperativeApproachId]
+          ),
           HttpStatus.BAD_REQUEST
         );
       }
-      if (
-        ca.status === CooperativeApproachStatus.REVOKED ||
-        ca.status === CooperativeApproachStatus.SUSPENDED
-      ) {
+      if (ca.status === CooperativeApproachStatus.SUSPENDED) {
         throw new HttpException(
-          `Cooperative approach ${program.cooperativeApproachId} is ${ca.status}; new ITMO authorizations are not permitted (Draft -/CMA.5 paras 20-21 — Suspended is a temporary pause; authorizations require an Active CA).`,
+          this.helperService.formatReqMessagesString(
+            "programme.caSuspendedBlocksAuth",
+            [program.cooperativeApproachId]
+          ),
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (ca.status === CooperativeApproachStatus.REVOKED) {
+        throw new HttpException(
+          this.helperService.formatReqMessagesString(
+            "programme.caRevokedBlocksAuth",
+            [program.cooperativeApproachId]
+          ),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -6470,7 +6485,14 @@ export class ProgrammeService {
       });
       if (!submittedIr) {
         throw new HttpException(
-          `Cannot authorize ITMOs for cooperative approach ${program.cooperativeApproachId}: no submitted initial report exists (Dec 2/CMA.3 Annex para 18).`,
+          this.helperService.formatReqMessagesString(
+            "programme.noSubmittedIrForCaAuth",
+            [
+              program.cooperativeApproachId,
+              ca.title ?? "",
+              program.cooperativeApproachId,
+            ]
+          ),
           HttpStatus.BAD_REQUEST
         );
       }

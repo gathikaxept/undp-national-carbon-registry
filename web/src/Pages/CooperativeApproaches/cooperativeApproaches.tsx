@@ -84,7 +84,12 @@ const CooperativeApproaches = () => {
         setTotalRecords(response.response?.data?.total || response.data.length);
       }
     } catch (error) {
-      message.error("Failed to load cooperative approaches");
+      const serverMsg = (error as any)?.message;
+      message.error(
+        serverMsg && typeof serverMsg === "string"
+          ? serverMsg
+          : "Failed to load cooperative approaches"
+      );
     } finally {
       setLoading(false);
     }
