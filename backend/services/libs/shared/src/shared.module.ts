@@ -25,10 +25,13 @@ import { CreditBlocksManagementModule } from "./credit-blocks-management/credit-
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { CreditTransactionsManagementModule } from "./credit-transactions-management/credit-transactions-management.module";
 import { AefReportManagementModule } from "./aef-report-management/aef-report-management.module";
+<<<<<<< HEAD
 import { CooperativeApproachModule } from "./cooperative-approach/cooperative-approach.module";
 import { CorrespondingAdjustmentModule } from "./corresponding-adjustment/corresponding-adjustment.module";
 import { InitialReportModule } from "./initial-report/initial-report.module";
 import { ItmoAccountModule } from "./itmo-account/itmo-account.module";
+=======
+>>>>>>> target/main
 
 @Module({
   imports: [
@@ -57,10 +60,13 @@ import { ItmoAccountModule } from "./itmo-account/itmo-account.module";
     AnalyticsModule,
     CreditTransactionsManagementModule,
     AefReportManagementModule,
+<<<<<<< HEAD
     CooperativeApproachModule,
     CorrespondingAdjustmentModule,
     InitialReportModule,
     ItmoAccountModule,
+=======
+>>>>>>> target/main
   ],
   providers: [SharedService],
   exports: [
@@ -90,10 +96,13 @@ import { ItmoAccountModule } from "./itmo-account/itmo-account.module";
     AnalyticsModule,
     CreditTransactionsManagementModule,
     AefReportManagementModule,
+<<<<<<< HEAD
     CooperativeApproachModule,
     CorrespondingAdjustmentModule,
     InitialReportModule,
     ItmoAccountModule,
+=======
+>>>>>>> target/main
   ],
 })
 export class SharedModule {}

@@ -6,10 +6,14 @@ import "./layout.sider.scss";
 import * as Icon from "react-bootstrap-icons";
 import {
   AppstoreOutlined,
+<<<<<<< HEAD
   CalculatorOutlined,
   DashboardOutlined,
   FileTextOutlined,
   GlobalOutlined,
+=======
+  DashboardOutlined,
+>>>>>>> target/main
   SettingOutlined,
   ShopOutlined,
   SplitCellsOutlined,
@@ -66,11 +70,14 @@ const LayoutSider = (props: LayoutSiderProps) => {
       "programmeManagement/viewAll",
       <UnorderedListOutlined />
     ),
+<<<<<<< HEAD
     getItem(
       "Cooperative Approaches",
       "cooperativeApproaches/viewAll",
       <GlobalOutlined />
     ),
+=======
+>>>>>>> target/main
     getItem(t("nav:companies"), "companyManagement/viewAll", <ShopOutlined />),
     getItem(t("nav:users"), "userManagement/viewAll", <UserOutlined />),
   ];
@@ -103,6 +110,7 @@ const LayoutSider = (props: LayoutSiderProps) => {
     items.splice(
       3,
       0,
+<<<<<<< HEAD
       getItem(t("nav:reports"), "reports", <Icon.ClipboardData />),
       getItem(
         "Corresponding Adjustments",
@@ -114,6 +122,9 @@ const LayoutSider = (props: LayoutSiderProps) => {
         "initialReports/viewAll",
         <FileTextOutlined />
       )
+=======
+      getItem(t("nav:reports"), "reports", <Icon.ClipboardData />)
+>>>>>>> target/main
     );
   }
   

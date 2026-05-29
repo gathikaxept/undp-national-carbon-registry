@@ -12,7 +12,10 @@ import { CreditBlockTransfersViewEntity } from "../view-entities/credit.block.tr
 import { CreditBlockRetirementsViewEntity } from "../view-entities/credit.block.retirements.view.entity";
 import { DocumentManagementModule } from "../document-management/document-management.module";
 import { AefReportManagementModule } from "../aef-report-management/aef-report-management.module";
+<<<<<<< HEAD
 import { CooperativeApproach } from "../entities/cooperative.approach.entity";
+=======
+>>>>>>> target/main
 
 @Module({
   imports: [
@@ -25,7 +28,10 @@ import { CooperativeApproach } from "../entities/cooperative.approach.entity";
       CreditBlockBalancesViewEntity,
       CreditBlockTransfersViewEntity,
       CreditBlockRetirementsViewEntity,
+<<<<<<< HEAD
       CooperativeApproach,
+=======
+>>>>>>> target/main
     ]),
     DocumentManagementModule,
     AefReportManagementModule,

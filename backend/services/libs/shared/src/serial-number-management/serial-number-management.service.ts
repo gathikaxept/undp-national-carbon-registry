@@ -136,6 +136,7 @@ export class SerialNumberManagementService {
     );
   }
 
+<<<<<<< HEAD
   /**
    * Compose a structured ITMO serial conforming to Decision 6/CMA.4
    * Annex I paragraph 5. Unique identifier consists of:
@@ -196,6 +197,8 @@ export class SerialNumberManagementService {
     return { party, itmoType, vintage, activityId, rangeStart, rangeEnd };
   }
 
+=======
+>>>>>>> target/main
   public getAuthorizationId(projectId: string, authTime: number) {
     const date = new Date(authTime);
     const day = String(date.getDate()).padStart(2, "0");

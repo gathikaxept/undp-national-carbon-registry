@@ -15,11 +15,14 @@ import { DocumentManagementController } from "./document.controller";
 import { AnalyticsController } from "./analytics.controller";
 import { CreditTransactionsManagementController } from "./credit.transactions.management.controller";
 import { ReportsManagementController } from "./reports.management.controller";
+<<<<<<< HEAD
 import { CooperativeApproachController } from "./cooperative-approach.controller";
 import { CorrespondingAdjustmentController } from "./corresponding-adjustment.controller";
 import { InitialReportController } from "./initial-report.controller";
 import { ItmoAccountController } from "./itmo-account.controller";
 import { AdminController } from "./admin.controller";
+=======
+>>>>>>> target/main
 
 @Module({
   imports: [
@@ -42,11 +45,14 @@ import { AdminController } from "./admin.controller";
     AnalyticsController,
     CreditTransactionsManagementController,
     ReportsManagementController,
+<<<<<<< HEAD
     CooperativeApproachController,
     CorrespondingAdjustmentController,
     InitialReportController,
     ItmoAccountController,
     AdminController,
+=======
+>>>>>>> target/main
   ],
   providers: [NationalAPIService, Logger],
 })

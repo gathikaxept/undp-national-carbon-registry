@@ -292,7 +292,11 @@ const ProjectDetailsViewComponent = (props: any) => {
 
   const getPieChartData = (d: ProgrammeSlU) => {
     const authorised =
+<<<<<<< HEAD
       d.projectProposalStage?.toString() === ProjectProposalStage.AUTHORISED &&
+=======
+      d.projectProposalStage.toString() === ProjectProposalStage.AUTHORISED &&
+>>>>>>> target/main
       d.creditEst
         ? Number(
             (
@@ -1034,7 +1038,11 @@ const ProjectDetailsViewComponent = (props: any) => {
         } else if (k === "estimatedProjectCost") {
           generalInfo[text] = `${v} USD`;
         } else if (k === "independentCertifier") {
+<<<<<<< HEAD
           generalInfo[text] = `${v?.join() ?? ""}`;
+=======
+          generalInfo[text] = `${v.join()}`;
+>>>>>>> target/main
         } else if (k === "additionalDocuments") {
           generalInfo[text] = (
             <span>
@@ -1070,6 +1078,7 @@ const ProjectDetailsViewComponent = (props: any) => {
     }
   );
 
+<<<<<<< HEAD
   // Article 6.2 cooperative-approach linkage. Surfaced from the
   // project_entity row (added to the project_details view in this
   // commit). Visible whenever the row carries a CA id; the labels
@@ -1086,6 +1095,8 @@ const ProjectDetailsViewComponent = (props: any) => {
     generalInfo["Acquiring Party"] = data.acquiringPartyCountryCode;
   }
 
+=======
+>>>>>>> target/main
   const getContactPersonInfo = () => {
     const nameText = t("projectDetailsView:contactName");
     const emailText = t("projectDetailsView:contactEmail");
@@ -1238,7 +1249,11 @@ const ProjectDetailsViewComponent = (props: any) => {
                     {userInfoState?.userRole !== "ViewOnly" &&
                       userInfoState?.companyRole !== "Certifier" && (
                         <div className="flex-display action-btns">
+<<<<<<< HEAD
                           {data.projectProposalStage?.toString() ===
+=======
+                          {data.projectProposalStage.toString() ===
+>>>>>>> target/main
                             ProjectProposalStage.AUTHORISED &&
                             data.creditBalance -
                               (data.creditFrozen ? data.creditFrozen : 0) >

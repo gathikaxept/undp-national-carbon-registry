@@ -44,6 +44,7 @@ interface CreditActionModalProps {
   data?: CreditBalanceInterface | CreditRetirementInterface;
 }
 
+<<<<<<< HEAD
 // Local presentation enum for the retirement-type radio group. Values
 // are the hand-rolled i18n keys used by Credit Actions strings; the
 // six members mirror CreditRetirementTypeEmnum. The four Article 6.2
@@ -68,6 +69,13 @@ const RETIREMENT_TYPE_TO_ENUM = {
   [RetirementType.SOP_ADAPTATION]: "SOP Adaptation",
 } as const;
 
+=======
+enum RetirementType {
+  CROSS_BORDER = "crossBoarderTransaction",
+  VOLUNTARY_CANCELLATION = "voluntaryCancellations",
+}
+
+>>>>>>> target/main
 export const CreditActionModal = (props: CreditActionModalProps) => {
   const {
     onFinish,
@@ -260,7 +268,14 @@ export const CreditActionModal = (props: CreditActionModalProps) => {
         undefined
       );
     } else if (type === CreditActionType.RETIREMENT) {
+<<<<<<< HEAD
       const retType = RETIREMENT_TYPE_TO_ENUM[retirementType] as CreditRetirementTypeEmnum;
+=======
+      const retType =
+        retirementType === RetirementType.CROSS_BORDER
+          ? CreditRetirementTypeEmnum.CROSS_BORDER_TRANSACTIONS
+          : CreditRetirementTypeEmnum.VOLUNTARY_CANCELLATIONS;
+>>>>>>> target/main
 
       onFinish(
         recivePartyRef.current,
@@ -436,6 +451,7 @@ export const CreditActionModal = (props: CreditActionModalProps) => {
                   <Radio value={RetirementType.VOLUNTARY_CANCELLATION}>
                     {t(RetirementType.VOLUNTARY_CANCELLATION)}
                   </Radio>
+<<<<<<< HEAD
                   {/* Article 6.2 retirement types (Dec 2/CMA.3 Annex
                      para 29 account buckets + Draft -/CMA.5 para 80
                      action subtypes). */}
@@ -451,6 +467,8 @@ export const CreditActionModal = (props: CreditActionModalProps) => {
                   <Radio value={RetirementType.SOP_ADAPTATION}>
                     SOP Adaptation
                   </Radio>
+=======
+>>>>>>> target/main
                 </Radio.Group>
               </Form.Item>
             )}

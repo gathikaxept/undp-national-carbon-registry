@@ -2,7 +2,11 @@ import { ViewColumn, ViewEntity } from "typeorm";
 
 @ViewEntity({
   expression: `
+<<<<<<< HEAD
       SELECT
+=======
+      SELECT 
+>>>>>>> target/main
         ct."id" AS "id",
         ct."serialNumber" AS "serialNumber",
         ct."amount" AS "creditAmount",
@@ -14,6 +18,7 @@ import { ViewColumn, ViewEntity } from "typeorm";
         r."logo" AS "receiverLogo",
         ct."senderId" AS "senderId",
         s."name" AS "senderName",
+<<<<<<< HEAD
         s."logo" AS "senderLogo",
         ct."type"::text AS "type",
         COALESCE(ct."isFirstTransfer", FALSE) AS "isFirstTransfer",
@@ -21,10 +26,14 @@ import { ViewColumn, ViewEntity } from "typeorm";
         ct."authorizationPurpose"::text AS "authorizationPurpose",
         ct."fromAccountType"::text AS "fromAccountType",
         ct."toAccountType"::text AS "toAccountType"
+=======
+        s."logo" AS "senderLogo"
+>>>>>>> target/main
       FROM "credit_transactions_entity" ct
       LEFT JOIN project_entity p ON ct."projectRefId" = p."refId"
       LEFT JOIN company r ON ct."recieverId" = r."companyId"
       LEFT JOIN company s ON ct."senderId" = s."companyId"
+<<<<<<< HEAD
       -- Dec 2/CMA.3 Annex para 1(a) and Dec 4/CMA.6 Annex II Actions
       -- table require the "first transfer" to be surfaced alongside
       -- subsequent transfers. Prior to this commit the view filtered to
@@ -32,6 +41,9 @@ import { ViewColumn, ViewEntity } from "typeorm";
       -- replicator were invisible to queryTransfers and to AEF Actions
       -- consumers. Broaden to include both types.
       WHERE ct."type" IN ('Transfered', 'FirstTransfer')
+=======
+      WHERE ct."type" = 'Transfered'
+>>>>>>> target/main
     `,
 })
 export class CreditBlockTransfersViewEntity {
@@ -70,6 +82,7 @@ export class CreditBlockTransfersViewEntity {
 
   @ViewColumn()
   senderLogo: string;
+<<<<<<< HEAD
 
   @ViewColumn()
   type: string;
@@ -88,4 +101,6 @@ export class CreditBlockTransfersViewEntity {
 
   @ViewColumn()
   toAccountType: string;
+=======
+>>>>>>> target/main
 }

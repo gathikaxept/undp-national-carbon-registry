@@ -77,15 +77,20 @@ export class AefReportManagementService {
     private fileHandler: FileHandlerInterface
   ) {}
 
+<<<<<<< HEAD
   public async handleAefRecord(
     creditBlock: CreditBlocksEntity,
     em: EntityManager,
     previousCreditBlock?: CreditBlocksEntity
   ) {
+=======
+  public async handleAefRecord(creditBlock: CreditBlocksEntity, em: EntityManager) {
+>>>>>>> target/main
     if (![TxType.ISSUE, TxType.TRANSFER, TxType.RETIRE].includes(creditBlock.txType)) {
       return;
     }
     const project = await this.programmeLedgerService.getProjectById(creditBlock.projectRefId);
+<<<<<<< HEAD
     // In production, every credit-block event is always tied to a project
     // that was persisted first. If the project lookup returns null, we
     // are looking at an orphan (e.g. test fixture seeded out of band);
@@ -114,12 +119,15 @@ export class AefReportManagementService {
       creditBlock.txType === TxType.TRANSFER &&
         previousCreditBlock?.isNotTransferred === true
     );
+=======
+>>>>>>> target/main
     const newAefActionRecord = plainToClass(AefActionsTableEntity, {
       creditBlockStartId: this.serialNumberManagementService.getBlockStartId(
         creditBlock.serialNumber
       ),
       creditBlockEndId: this.serialNumberManagementService.getBlockEndId(creditBlock.serialNumber),
       creditAmount: creditBlock.creditAmount,
+<<<<<<< HEAD
       // Vintage is authoritative on the CreditBlocksEntity column; the
       // serial-number parse is a fallback for legacy rows that lost the
       // direct field. Prefer entity, fall back to serial parse. Prevents
@@ -129,21 +137,28 @@ export class AefReportManagementService {
       vintage:
         creditBlock.vintage ??
         this.serialNumberManagementService.getVintage(creditBlock.serialNumber),
+=======
+      vintage: this.serialNumberManagementService.getVintage(creditBlock.serialNumber),
+>>>>>>> target/main
       sector: project.sector,
       sectoralScope: project.sectoralScope,
       projectAuthorizationTime: project.projectAuthorizationTime,
       authorizationId: project.authorizationId,
       actionTime: creditBlock.txTime,
       aquiringParty: this.configService.get("AEF.defaultAquiringParty"),
+<<<<<<< HEAD
       cooperativeApproachId: creditBlock.cooperativeApproachId || null,
       authorizationPurpose: creditBlock.authorizationPurpose || null,
       acquiringPartyCountryCode: project.acquiringPartyCountryCode || null,
       isFirstTransfer,
       reportingYear: new Date(creditBlock.txTime).getFullYear(),
+=======
+>>>>>>> target/main
     });
     if (creditBlock.txType == TxType.ISSUE) {
       newAefActionRecord.actionType = AefActionTypeEnum.AUTHORIZATION;
     } else if (creditBlock.txType == TxType.TRANSFER) {
+<<<<<<< HEAD
       newAefActionRecord.actionType = isFirstTransfer
         ? AefActionTypeEnum.FIRST_TRANSFER
         : AefActionTypeEnum.TRANSFER;
@@ -173,6 +188,21 @@ export class AefReportManagementService {
       } else if (!txData) {
         // Retirement via retireToAccount (no txData with action field)
         newAefActionRecord.actionType = AefActionTypeEnum.RETIRE;
+=======
+      newAefActionRecord.actionType = AefActionTypeEnum.TRANSFER;
+    } else if (creditBlock.txType == TxType.RETIRE) {
+      const txData: CreditRetireActionDto = creditBlock.txData;
+      if (txData.action == RetirementACtionEnum.ACCEPT) {
+        const retireTrasaction = await this.creditTransactionsEntityRepository.findOne({
+          where: { id: txData.transactionId },
+        });
+        if (retireTrasaction.retirementType == CreditRetirementTypeEnum.CROSS_BORDER_TRANSACTIONS) {
+          newAefActionRecord.actionType = AefActionTypeEnum.CROSS_BOARDER_TRANSFER;
+          newAefActionRecord.aquiringParty = retireTrasaction.country;
+        } else {
+          newAefActionRecord.actionType = AefActionTypeEnum.RETIRE;
+        }
+>>>>>>> target/main
       } else {
         return;
       }
@@ -260,10 +290,13 @@ export class AefReportManagementService {
           prepData = this.prepareActionsData(resp);
           localFileName = `${AefReportTypeEnum.ACTIONS}`;
           break;
+<<<<<<< HEAD
         case AefReportTypeEnum.ANNUAL_INFORMATION:
           prepData = this.prepareActionsData(resp);
           localFileName = `${AefReportTypeEnum.ANNUAL_INFORMATION}`;
           break;
+=======
+>>>>>>> target/main
         default:
           break;
       }

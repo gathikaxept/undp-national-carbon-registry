@@ -29,9 +29,12 @@ export class DataExportActions extends DataExportDto {
   purposeForCancellation: string;
   actionBy: string;
   firstTransfer: string;
+<<<<<<< HEAD
   cooperativeApproachId: string;
   acquiringPartyCountryCode: string;
   authorizationPurpose: string;
   isFirstTransfer: boolean;
   reportingYear: number;
+=======
+>>>>>>> target/main
 }

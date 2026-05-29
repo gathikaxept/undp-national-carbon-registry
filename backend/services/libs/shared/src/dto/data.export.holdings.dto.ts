@@ -20,6 +20,9 @@ export class DataExportHoldings extends DataExportDto {
   purposeForAuthorization: string;
   oimp: string;
   firstTransferDefinition: string;
+<<<<<<< HEAD
   cooperativeApproachId: string;
   authorizationPurpose: string;
+=======
+>>>>>>> target/main
 }

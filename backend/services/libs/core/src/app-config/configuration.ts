@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -8,6 +9,8 @@ function required(name: string): string {
   return value;
 }
 
+=======
+>>>>>>> target/main
 export default () => ({
   stage: process.env.STAGE || "local",
   systemCountry: process.env.systemCountryCode || "NG",
@@ -26,16 +29,26 @@ export default () => ({
     username: process.env.DB_USER || "hquser",
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "carbondev",
+<<<<<<< HEAD
     synchronize: process.env.NODE_ENV === "test" || process.env.DB_SYNCHRONIZE === "true",
+=======
+    synchronize: process.env.NODE_ENV == "prod" ? true : true,
+>>>>>>> target/main
     autoLoadEntities: true,
     logging: ["error"],
   },
   jwt: {
     expiresIn: process.env.EXPIRES_IN || "7200",
     refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "12h",
+<<<<<<< HEAD
     userSecret: required("USER_JWT_SECRET"),
     refreshTokenSecret: required("REFRESH_TOKEN_JWT_SECRET"),
     adminSecret: required("ADMIN_JWT_SECRET"),
+=======
+    userSecret: process.env.USER_JWT_SECRET || "1324",
+    refreshTokenSecret: process.env.REFRESH_TOKEN_JWT_SECRET || "9823",
+    adminSecret: process.env.ADMIN_JWT_SECRET || "8654",
+>>>>>>> target/main
     encodePassword: process.env.ENCODE_PASSWORD || false,
     saltRounds: process.env.SALT_ROUNDS || 10,
   },
@@ -48,9 +61,17 @@ export default () => ({
     creditBlocksTable: "credit_blocks",
   },
   email: {
+<<<<<<< HEAD
     source: process.env.SOURCE_EMAIL || "noreply@example.com",
     endpoint: required("SMTP_ENDPOINT"),
     username: required("SMTP_USERNAME"),
+=======
+    source: process.env.SOURCE_EMAIL || "info@xeptagon.xyz",
+    endpoint:
+      process.env.SMTP_ENDPOINT ||
+      "vpce-02cef9e74f152b675-b00ybiai.email-smtp.us-east-1.vpce.amazonaws.com",
+    username: process.env.SMTP_USERNAME || "EXAMPLE",
+>>>>>>> target/main
     password: process.env.SMTP_PASSWORD,
     disabled: process.env.IS_EMAIL_DISABLED === "true" ? true : false,
     disableLowPriorityEmails:
@@ -62,7 +83,11 @@ export default () => ({
   s3CommonBucket: {
     name: process.env.S3_COMMON_BUCKET || "carbon-common-dev",
   },
+<<<<<<< HEAD
   host: process.env.HOST || "http://localhost:3030",
+=======
+  host: process.env.HOST || "https://test.carbreg.org",
+>>>>>>> target/main
   backendHost: process.env.BACKEND_HOST || "http://localhost:3000",
   liveChat: "https://undp2020cdo.typeform.com/to/emSWOmDo",
   mapbox: {
@@ -71,9 +96,19 @@ export default () => ({
   openstreet: {
     retrieve: process.env.OPENSTREET_QUERY === "true" || false,
   },
+<<<<<<< HEAD
   asyncQueueName: required("ASYNC_QUEUE_NAME"),
   ITMOSystem: {
     endpoint: process.env.ITMO_ENDPOINT,
+=======
+  asyncQueueName:
+    process.env.ASYNC_QUEUE_NAME ||
+    "https://sqs.us-east-1.amazonaws.com/302213478610/AsyncQueuedev.fifo",
+  ITMOSystem: {
+    endpoint:
+      process.env.ITMO_ENDPOINT ||
+      "https://dev-digital-carbon-finance-webapp-api-rxloyxnj3dbso.azurewebsites.net/api/v1/",
+>>>>>>> target/main
     apiKey: process.env.ITMO_API_KEY,
     email: process.env.ITMO_EMAIL,
     password: process.env.ITMO_PASSWORD,
@@ -84,7 +119,13 @@ export default () => ({
   },
   registry: {
     syncEnable: process.env.SYNC_ENABLE === "true" ? true : false,
+<<<<<<< HEAD
     endpoint: process.env.SYNC_ENDPOINT,
+=======
+    endpoint:
+      process.env.SYNC_ENDPOINT ||
+      "https://u4h9swxm8b.execute-api.us-east-1.amazonaws.com/dev",
+>>>>>>> target/main
     apiToken: process.env.SYNC_API_TOKEN,
   },
   docGenerate: {
@@ -99,7 +140,11 @@ export default () => ({
   },
   cadTrust: {
     enable: process.env.CADTRUST_ENABLE === "true" ? true : false,
+<<<<<<< HEAD
     endpoint: process.env.CADTRUST_ENDPOINT,
+=======
+    endpoint: process.env.CADTRUST_ENDPOINT || "http://44.212.139.61:31310/",
+>>>>>>> target/main
   },
   systemType: process.env.SYSTEM_TYPE || "CARBON_UNIFIED_SYSTEM",
   systemName: process.env.SYSTEM_NAME || "SystemX",
@@ -139,12 +184,15 @@ export default () => ({
     firstTransferringPartyId: process.env.FIRST_TRANSFERRING_PARTY_ID || "XX",
     seperator: process.env.SERIAL_NUMBER_SEPERATOR || "-",
   },
+<<<<<<< HEAD
   itmo: {
     omgePercentage: parseFloat(process.env.ITMO_OMGE_PERCENTAGE) || 2,
     sopPercentage: parseFloat(process.env.ITMO_SOP_PERCENTAGE) || 5,
     autoDeductAtIssuance:
       process.env.ITMO_AUTO_DEDUCT_AT_ISSUANCE === "false" ? false : true,
   },
+=======
+>>>>>>> target/main
   AEF: {
     artical6RecordId: process.env.NOT_APPLICABLE_LABEL || "NA",
     cooperativeApproach: process.env.COOPERATIVE_APPROACH || "Article 6.2",

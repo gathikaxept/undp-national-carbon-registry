@@ -12,7 +12,10 @@ import { Emission } from "@app/shared/entities/emission.entity";
 import { Projection } from "@app/shared/entities/projection.entity";
 import { EventLog } from "@app/shared/entities/event.log.entity";
 import { NationalAccountingController } from "./national-accounting.controller";
+<<<<<<< HEAD
 import { NationalAccountingModule } from "./national-accounting/national.accounting.module";
+=======
+>>>>>>> target/main
 import { SharedModule } from "@app/shared";
 import { CoreModule } from "@app/core";
 
@@ -31,7 +34,10 @@ import { CoreModule } from "@app/core";
     ]),
     SharedModule,
     CoreModule,
+<<<<<<< HEAD
     NationalAccountingModule,
+=======
+>>>>>>> target/main
   ],
   controllers: [ProgrammeController, NationalAccountingController],
   providers: [Logger, AggregateAPIService],

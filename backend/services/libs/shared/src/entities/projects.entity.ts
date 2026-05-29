@@ -1,7 +1,10 @@
 import { Column, Entity, PrimaryColumn, PrimaryGeneratedColumn } from "typeorm";
 import { ProjectProposalStage } from "../enum/projectProposalStage.enum";
 import { TxType } from "../enum/txtype.enum";
+<<<<<<< HEAD
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
+=======
+>>>>>>> target/main
 import { NumberTransformer } from "../functions/number.transformer.decorator";
 import { ActivityEntity } from "./activity.entity";
 
@@ -87,6 +90,7 @@ export class ProjectEntity {
 
   @Column({ default: 0 })
   creditChange: number;
+<<<<<<< HEAD
 
   @Column({ nullable: true })
   cooperativeApproachId: string;
@@ -101,4 +105,6 @@ export class ProjectEntity {
 
   @Column({ nullable: true })
   acquiringPartyCountryCode: string;
+=======
+>>>>>>> target/main
 }

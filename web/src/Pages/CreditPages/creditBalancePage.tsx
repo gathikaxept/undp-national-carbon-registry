@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select, Tag } from 'antd';
@@ -18,10 +19,19 @@ export const CreditBalancePage = () => {
   const { t } = useTranslation(['creditPages']);
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>('all');
 
+=======
+import { useTranslation } from 'react-i18next';
+import { CreditBalanceTableComponent } from './Components/creditBalanceTable';
+import './creditPageStyles.scss';
+
+export const CreditBalancePage = () => {
+  const { t } = useTranslation(['creditPages']);
+>>>>>>> target/main
   return (
     <div className="content-container credit-management">
       <div className="credit-title-bar">
         <div className="title-bar">
+<<<<<<< HEAD
           <div className="body-title" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {t('creditBalance')}
             <Select
@@ -33,6 +43,10 @@ export const CreditBalancePage = () => {
             />
           </div>
           <CreditBalanceTableComponent t={t} accountTypeFilter={accountTypeFilter} />
+=======
+          <div className="body-title">{t('creditBalance')}</div>
+          <CreditBalanceTableComponent t={t} />
+>>>>>>> target/main
         </div>
       </div>
     </div>

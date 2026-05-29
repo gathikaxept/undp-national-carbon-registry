@@ -17,7 +17,11 @@
   "networkError": "Error de red. Por favor, verifique su conexión a internet y vuelva a intentarlo.",
   "systemError": "Algo salió mal. Por favor, inténtelo de nuevo.",
   "approve": "APROBAR",
+<<<<<<< HEAD
   "reject": "RECHAZAR",
   "cooperativeApproachCreateFailed": "No se pudo crear el enfoque cooperativo",
   "cooperativeApproachUpdateFailed": "No se pudo actualizar el enfoque cooperativo"
+=======
+  "reject": "RECHAZAR"
+>>>>>>> target/main
 }

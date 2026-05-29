@@ -1,7 +1,10 @@
 import { BeforeInsert, Column, Entity, PrimaryColumn } from "typeorm";
 import { TxType } from "../enum/txtype.enum";
+<<<<<<< HEAD
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
 import { AccountType } from "../enum/account.type.enum";
+=======
+>>>>>>> target/main
 import { CreditTransactionLedgerRecordDto } from "../dto/credit.transaction.ledger.record.dto";
 
 @Entity()
@@ -40,6 +43,7 @@ export class CreditBlocksEntity {
   @Column({ type: "text" })
   serialNumber: string;
 
+<<<<<<< HEAD
   // Dec 6/CMA.4 Annex I para 5: each ITMO must have a unique
   // 5-component identifier (originating Party / ITMO type / vintage /
   // mitigation activity / unique sequence). Immutable per Draft -/CMA.5
@@ -48,6 +52,8 @@ export class CreditBlocksEntity {
   @Column({ type: "text", nullable: true })
   itmoSerial?: string;
 
+=======
+>>>>>>> target/main
   @Column({ type: "text" })
   vintage: string;
 
@@ -63,6 +69,7 @@ export class CreditBlocksEntity {
   @Column({ type: "bigint" })
   createTime: number;
 
+<<<<<<< HEAD
   @Column({ nullable: true })
   cooperativeApproachId: string;
 
@@ -88,6 +95,8 @@ export class CreditBlocksEntity {
   @Column({ type: "boolean", default: false })
   sopDeductedAtIssuance: boolean;
 
+=======
+>>>>>>> target/main
   @BeforeInsert()
   async timestampAtInsert() {
     const timestamp = new Date().getTime();

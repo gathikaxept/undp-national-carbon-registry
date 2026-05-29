@@ -2,7 +2,10 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { HelperService } from "../util/helpers.service";
 import { CreditBlocksEntity } from "../entities/credit.blocks.entity";
 import { TxType } from "../enum/txtype.enum";
+<<<<<<< HEAD
 import { AccountType } from "../enum/account.type.enum";
+=======
+>>>>>>> target/main
 import { User } from "../entities/user.entity";
 import { SerialNumberManagementService } from "../serial-number-management/serial-number-management.service";
 import { plainToClass } from "class-transformer";
@@ -10,6 +13,7 @@ import { ProjectEntity } from "../entities/projects.entity";
 
 @Injectable()
 export class CreditBlocksManagementService {
+<<<<<<< HEAD
   // Draft -/CMA.5 para 132 — itmoSerial stable through splits.
   // Exposed as a static constant so the clause survives webpack
   // minification; used by infra/E2E verification to confirm the
@@ -17,6 +21,8 @@ export class CreditBlocksManagementService {
   public static readonly ITMO_SERIAL_LINEAGE_CLAUSE =
     "Draft -/CMA.5 para 132 — itmoSerial stable through splits";
 
+=======
+>>>>>>> target/main
   constructor(
     private readonly helperService: HelperService,
     private readonly serialNumberManagementService: SerialNumberManagementService
@@ -67,6 +73,7 @@ export class CreditBlocksManagementService {
               remainingCreditAmount
             );
 
+<<<<<<< HEAD
           // Draft -/CMA.5 para 132 — itmoSerial stable through splits
           const { parentItmoSerial, childItmoSerial } =
             this.deriveSplitItmoSerials(
@@ -74,13 +81,18 @@ export class CreditBlocksManagementService {
               transferredCreditAmountFromBlock
             );
 
+=======
+>>>>>>> target/main
           //update current block
           creditBlock.creditAmount =
             creditBlock.creditAmount - transferredCreditAmountFromBlock;
           creditBlock.serialNumber = firstSerialNumber;
+<<<<<<< HEAD
           if (parentItmoSerial !== undefined) {
             creditBlock.itmoSerial = parentItmoSerial;
           }
+=======
+>>>>>>> target/main
           creditBlock.txType = TxType.CREDIT_BLOCK_SPLIT;
           creditBlock.txRef = this.getCreditBlockTxRef(
             TxType.CREDIT_BLOCK_SPLIT,
@@ -110,8 +122,11 @@ export class CreditBlocksManagementService {
             ownerCompanyId: toCompanyId,
             projectRefId: creditBlock.projectRefId,
             serialNumber: secondSerialNumber,
+<<<<<<< HEAD
             // Draft -/CMA.5 para 132 — itmoSerial stable through splits
             itmoSerial: childItmoSerial,
+=======
+>>>>>>> target/main
             vintage: creditBlock.vintage,
             creditAmount: transferredCreditAmountFromBlock,
             reservedCreditAmount: 0,
@@ -145,6 +160,7 @@ export class CreditBlocksManagementService {
               transferredCreditAmountFromBlock
             );
 
+<<<<<<< HEAD
           // Draft -/CMA.5 para 132 — itmoSerial stable through splits
           const { parentItmoSerial, childItmoSerial } =
             this.deriveSplitItmoSerials(
@@ -152,13 +168,18 @@ export class CreditBlocksManagementService {
               transferredCreditAmountFromBlock
             );
 
+=======
+>>>>>>> target/main
           //update current block
           creditBlock.creditAmount =
             creditBlock.creditAmount - transferredCreditAmountFromBlock;
           creditBlock.serialNumber = firstSerialNumber;
+<<<<<<< HEAD
           if (parentItmoSerial !== undefined) {
             creditBlock.itmoSerial = parentItmoSerial;
           }
+=======
+>>>>>>> target/main
           creditBlock.txType = TxType.CREDIT_BLOCK_SPLIT;
           creditBlock.txRef = this.getCreditBlockTxRef(
             TxType.CREDIT_BLOCK_SPLIT,
@@ -188,8 +209,11 @@ export class CreditBlocksManagementService {
             ownerCompanyId: toCompanyId,
             projectRefId: creditBlock.projectRefId,
             serialNumber: secondSerialNumber,
+<<<<<<< HEAD
             // Draft -/CMA.5 para 132 — itmoSerial stable through splits
             itmoSerial: childItmoSerial,
+=======
+>>>>>>> target/main
             vintage: creditBlock.vintage,
             creditAmount: transferredCreditAmountFromBlock,
             reservedCreditAmount: 0,
@@ -230,6 +254,7 @@ export class CreditBlocksManagementService {
       );
     const creditBlockId =
       this.serialNumberManagementService.getCreditBlockId(serialNumber);
+<<<<<<< HEAD
 
     // Dec 6/CMA.4 Annex I para 5 — compose the 5-component ITMO
     // identifier alongside the registry-internal serialNumber. The ITMO
@@ -245,6 +270,8 @@ export class CreditBlocksManagementService {
       blockEnd
     );
 
+=======
+>>>>>>> target/main
     const newBlock = plainToClass(CreditBlocksEntity, {
       creditBlockId: creditBlockId,
       txRef: this.getCreditBlockTxRef(
@@ -259,15 +286,21 @@ export class CreditBlocksManagementService {
       ownerCompanyId: project.companyId,
       projectRefId: project.refId,
       serialNumber: serialNumber,
+<<<<<<< HEAD
       itmoSerial: itmoSerial,
+=======
+>>>>>>> target/main
       vintage: vintage,
       creditAmount: creditAmount,
       reservedCreditAmount: 0,
       transactionRecords: [],
       isNotTransferred: true,
+<<<<<<< HEAD
       accountType: AccountType.HOLDING,
       cooperativeApproachId: project.cooperativeApproachId || null,
       authorizationPurpose: project.authorizationPurpose || null,
+=======
+>>>>>>> target/main
     });
     return newBlock;
   }
@@ -283,6 +316,7 @@ export class CreditBlocksManagementService {
       data ? `#${data}` : ``
     }`;
   }
+<<<<<<< HEAD
 
   /**
    * Draft -/CMA.5 para 132 — itmoSerial stable through splits.
@@ -327,4 +361,6 @@ export class CreditBlocksManagementService {
       childItmoSerial: `${prefix}-${childStart}:${childEnd}`,
     };
   }
+=======
+>>>>>>> target/main
 }

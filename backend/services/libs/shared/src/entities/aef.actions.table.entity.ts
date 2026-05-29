@@ -7,7 +7,10 @@ import {
 } from "typeorm";
 import { TxType } from "../enum/txtype.enum";
 import { AefActionTypeEnum } from "../enum/aef.action.type.enum";
+<<<<<<< HEAD
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
+=======
+>>>>>>> target/main
 
 @Entity()
 export class AefActionsTableEntity {
@@ -47,6 +50,7 @@ export class AefActionsTableEntity {
   @Column()
   aquiringParty: string;
 
+<<<<<<< HEAD
   @Column({ nullable: true })
   cooperativeApproachId: string;
 
@@ -70,6 +74,8 @@ export class AefActionsTableEntity {
   @Column({ type: "int", nullable: true })
   reportingYear: number;
 
+=======
+>>>>>>> target/main
   @Column({ type: "bigint" })
   createdTime: number;
 

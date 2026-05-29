@@ -16,7 +16,10 @@ export enum CounterType {
   CREDIT_BLOCKS = 14,
   CREDIT_BLOCKS_REPLICATE_SEQ = 15,
   CREDIT_TRANSACTIONS = 16,
+<<<<<<< HEAD
   COOPERATIVE_APPROACH = 17,
   CORRESPONDING_ADJUSTMENT = 18,
   INITIAL_REPORT = 19,
+=======
+>>>>>>> target/main
 }

@@ -1,5 +1,6 @@
 export enum CreditTransactionTypesEnum {
   ISSUED = "Issued",
+<<<<<<< HEAD
   AUTHORIZED = "Authorized",
   FIRST_TRANSFER = "FirstTransfer",
   TRANSFERED = "Transfered",
@@ -9,4 +10,8 @@ export enum CreditTransactionTypesEnum {
   USE_FOR_OIMP = "UseForOIMP",
   VOLUNTARY_CANCELLATION = "VoluntaryCancellation",
   OMGE_CANCELLATION = "OMGECancellation",
+=======
+  TRANSFERED = "Transfered",
+  RETIRED = "Retired",
+>>>>>>> target/main
 }

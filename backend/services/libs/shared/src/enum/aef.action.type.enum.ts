@@ -1,5 +1,6 @@
 export enum AefActionTypeEnum {
   AUTHORIZATION = "authorization",
+<<<<<<< HEAD
   FIRST_TRANSFER = "firstTransfer",
   TRANSFER = "transfer",
   ACQUISITION = "acquisition",
@@ -10,4 +11,9 @@ export enum AefActionTypeEnum {
   VOLUNTARY_CANCELLATION = "voluntaryCancellation",
   OMGE_CANCELLATION = "omgeCancellation",
   HOLDINGS_SNAPSHOT = "holdingsSnapshot",
+=======
+  TRANSFER = "transfer",
+  RETIRE = "retire",
+  CROSS_BOARDER_TRANSFER = "crossBoarderTransfer",
+>>>>>>> target/main
 }

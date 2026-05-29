@@ -62,7 +62,11 @@ export const getIssuedReceivedTagColor = (status: IssuedOrReceivedOptions) => {
 };
 
 export const CreditBalanceTableComponent = (props: any) => {
+<<<<<<< HEAD
   const { t, accountTypeFilter } = props;
+=======
+  const { t } = props;
+>>>>>>> target/main
 
   const { post } = useConnection();
   const { userInfoState } = useUserContext();
@@ -117,6 +121,7 @@ export const CreditBalanceTableComponent = (props: any) => {
       });
     }
 
+<<<<<<< HEAD
     if (accountTypeFilter && accountTypeFilter !== "all") {
       filterAnd.push({
         key: "accountType",
@@ -125,6 +130,8 @@ export const CreditBalanceTableComponent = (props: any) => {
       });
     }
 
+=======
+>>>>>>> target/main
     if (search && search.trim() !== "") {
       filterOr.push({
         key: "receiverName",
@@ -416,7 +423,11 @@ export const CreditBalanceTableComponent = (props: any) => {
     if (isInitialRender.current) {
       getQueryData();
     }
+<<<<<<< HEAD
   }, [currentPage, pageSize, modalActionVisible, modalResponseVisible, accountTypeFilter]);
+=======
+  }, [currentPage, pageSize, modalActionVisible, modalResponseVisible]);
+>>>>>>> target/main
 
   useEffect(() => {
     if (isInitialRender.current) {

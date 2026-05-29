@@ -1,5 +1,8 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+<<<<<<< HEAD
 import { ConfigService } from "@nestjs/config";
+=======
+>>>>>>> target/main
 import { InjectEntityManager } from "@nestjs/typeorm";
 import { PRECISION } from "@undp/carbon-credit-calculator/dist/esm/calculator";
 import { plainToClass } from "class-transformer";
@@ -40,6 +43,7 @@ import { CreditTransactionsEntity } from "../entities/credit.transactions.entity
 import { CreditRetireActionDto } from "../dto/credit.retire.action.dto";
 import { RetirementACtionEnum } from "../enum/retirement.action.enum";
 import { SerialNumberManagementService } from "../serial-number-management/serial-number-management.service";
+<<<<<<< HEAD
 import { AccountType } from "../enum/account.type.enum";
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
 import { CreditRetirementTypeEnum } from "../enum/credit.retirement.type.enum";
@@ -76,6 +80,8 @@ function mapRetirementTypeToAccountType(
       return AccountType.HOLDING;
   }
 }
+=======
+>>>>>>> target/main
 
 @Injectable()
 export class ProgrammeLedgerService {
@@ -85,8 +91,12 @@ export class ProgrammeLedgerService {
     private ledger: LedgerDBInterface,
     private helperService: HelperService,
     private readonly creditBlocksManagementService: CreditBlocksManagementService,
+<<<<<<< HEAD
     private readonly serialNumberManagementService: SerialNumberManagementService,
     private readonly configService: ConfigService
+=======
+    private readonly serialNumberManagementService: SerialNumberManagementService
+>>>>>>> target/main
   ) {}
 
   public async createProgramme(programme: Programme): Promise<Programme> {
@@ -488,6 +498,7 @@ export class ProgrammeLedgerService {
             project.txTime,
             user
           );
+<<<<<<< HEAD
           // Mark blocks with OMGE/SOP deduction flags if auto-deduct is enabled
           const autoDeduct = this.configService.get<boolean>("itmo.autoDeductAtIssuance");
           if (autoDeduct) {
@@ -495,6 +506,8 @@ export class ProgrammeLedgerService {
             newBlock.sopDeductedAtIssuance = true;
           }
 
+=======
+>>>>>>> target/main
           insertMap[
             this.ledger.creditBlocksTable + "#" + newBlock.creditBlockId
           ] = newBlock;
@@ -842,6 +855,7 @@ export class ProgrammeLedgerService {
         let updateWhereMap = {};
         let insertMap = {};
         if (retirementAction.action == RetirementACtionEnum.ACCEPT) {
+<<<<<<< HEAD
           // Dec 2/CMA.3 Annex para 29 + Draft -/CMA.5 para 80: the 6
           // retirement / cancellation account types must end up on the
           // retired block so AEF Actions rows report the correct
@@ -850,6 +864,8 @@ export class ProgrammeLedgerService {
           const accountTypeForRetirement = mapRetirementTypeToAccountType(
             creditRetirementRequest.retirementType
           );
+=======
+>>>>>>> target/main
           if (
             creditBlock.reservedCreditAmount == retireRequestRecord.amount &&
             creditBlock.creditAmount == retireRequestRecord.amount
@@ -869,7 +885,10 @@ export class ProgrammeLedgerService {
               isNotTransferred: false,
               reservedCreditAmount: 0,
               transactionRecords: creditBlock.transactionRecords,
+<<<<<<< HEAD
               accountType: accountTypeForRetirement,
+=======
+>>>>>>> target/main
             };
           } else {
             const { firstSerialNumber, secondSerialNumber } =
@@ -926,6 +945,7 @@ export class ProgrammeLedgerService {
                   },
                 ],
                 isNotTransferred: false,
+<<<<<<< HEAD
                 // Propagate the Dec 2/CMA.3 para 29 retirement account
                 // bucket + the Phase 2 CA linkage + authorization
                 // purpose to the derived retirement block so AEF
@@ -934,6 +954,8 @@ export class ProgrammeLedgerService {
                 cooperativeApproachId: creditBlock.cooperativeApproachId,
                 authorizationPurpose: creditBlock.authorizationPurpose,
                 itmoSerial: creditBlock.itmoSerial,
+=======
+>>>>>>> target/main
               });
           }
           if (creditBlock.isNotTransferred) {
@@ -2661,6 +2683,7 @@ export class ProgrammeLedgerService {
 
     return updatedProgramme;
   }
+<<<<<<< HEAD
 
   /**
    * Retire credits to a specific account type (NDC, OIMP, voluntary cancellation, etc.)
@@ -2926,4 +2949,6 @@ export class ProgrammeLedgerService {
     const netCredits = totalCredits - omgeAmount - sopAmount;
     return { netCredits, omgeAmount, sopAmount };
   }
+=======
+>>>>>>> target/main
 }

@@ -8,8 +8,11 @@ import {
 import { CreditTransactionTypesEnum } from "../enum/credit.transaction.types.enum";
 import { CreditTransactionStatusEnum } from "../enum/credit.transaction.status.enum";
 import { CreditRetirementTypeEnum } from "../enum/credit.retirement.type.enum";
+<<<<<<< HEAD
 import { AccountType } from "../enum/account.type.enum";
 import { AuthorizationPurpose } from "../enum/authorization.purpose.enum";
+=======
+>>>>>>> target/main
 
 @Entity()
 export class CreditTransactionsEntity {
@@ -52,6 +55,7 @@ export class CreditTransactionsEntity {
   @Column({ type: "text", nullable: true })
   organizationName?: string;
 
+<<<<<<< HEAD
   @Column({
     type: "enum",
     enum: AccountType,
@@ -82,6 +86,8 @@ export class CreditTransactionsEntity {
   @Column({ type: "boolean", default: false })
   isFirstTransfer: boolean;
 
+=======
+>>>>>>> target/main
   @Column({ type: "bigint" })
   createTime: number;
 

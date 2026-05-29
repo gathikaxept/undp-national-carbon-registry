@@ -29,7 +29,11 @@
   "averageCreditingPeriod": "Annual Average Over the Crediting Period",
   "yes": "yes",
   "no": "no",
+<<<<<<< HEAD
   "somethingWentWrong": "Something went wrong!",
   "cooperativeApproachCreateFailed": "Failed to create cooperative approach",
   "cooperativeApproachUpdateFailed": "Failed to update cooperative approach"
+=======
+  "somethingWentWrong": "Something went wrong!"
+>>>>>>> target/main
 }

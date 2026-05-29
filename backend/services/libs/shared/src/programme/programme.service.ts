@@ -54,10 +54,13 @@ import { AsyncActionType } from "../enum/async.action.type.enum";
 import { ProgrammeAcceptedDto } from "../dto/programme.accepted.dto";
 import { CountryService } from "../util/country.service";
 import { Programme } from "../entities/programme.entity";
+<<<<<<< HEAD
 import { InitialReport } from "../entities/initial.report.entity";
 import { InitialReportStatus } from "../enum/initial.report.status.enum";
 import { CooperativeApproach } from "../entities/cooperative.approach.entity";
 import { CooperativeApproachStatus } from "../enum/cooperative.approach.status.enum";
+=======
+>>>>>>> target/main
 import { ConstantEntity } from "../entities/constants.entity";
 import { CounterType } from "../util/counter.type.enum";
 import { DataListResponseDto } from "../dto/data.list.response";
@@ -197,6 +200,7 @@ export class ProgrammeService {
     private regionRepo: Repository<Region>,
     @InjectRepository(EventLog) private eventLogRepo: Repository<EventLog>,
     @InjectRepository(CreditAuditLog)
+<<<<<<< HEAD
     private creditAuditLogRepo: Repository<CreditAuditLog>,
     // Dec 2/CMA.3 Annex chapter V para 18 guard: read-side access to
     // InitialReport so we can refuse authorizeProgramme for an Article
@@ -207,6 +211,9 @@ export class ProgrammeService {
     // the linked cooperative approach has been revoked.
     @InjectRepository(CooperativeApproach)
     private cooperativeApproachRepo: Repository<CooperativeApproach>
+=======
+    private creditAuditLogRepo: Repository<CreditAuditLog>
+>>>>>>> target/main
   ) {}
 
   private fileExtensionMap = new Map([
@@ -5826,6 +5833,7 @@ export class ProgrammeService {
       );
     }
 
+<<<<<<< HEAD
     // Dec 2/CMA.3 Annex chapter V para 18: Article 6.2 ITMO issuance is
     // only permitted under a live cooperative approach linkage. The
     // symmetric guard on /authorize (see authorizeProgramme below) fires
@@ -5841,6 +5849,8 @@ export class ProgrammeService {
       );
     }
 
+=======
+>>>>>>> target/main
     let verfiedMitigationMap = {};
     let totalCreditIssuance = 0;
     let countedActions = [];
@@ -6417,6 +6427,7 @@ export class ProgrammeService {
       );
     }
 
+<<<<<<< HEAD
     // Dec 2/CMA.3 Annex chapter V para 18: "A participating Party shall
     // submit an initial report describing how its participation meets
     // the participation responsibilities in paragraphs 3-5 ... prior to
@@ -6498,6 +6509,8 @@ export class ProgrammeService {
       }
     }
 
+=======
+>>>>>>> target/main
     if (user.companyRole === CompanyRole.MINISTRY) {
       const permission = await this.findPermissionForMinistryUser(
         user,

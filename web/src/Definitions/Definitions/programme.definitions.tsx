@@ -374,10 +374,13 @@ export interface ProgrammeSlU extends ProgrammeSl {
   contactPerson: string;
   noObjectionLetterUrl: string;
   infRefId: string;
+<<<<<<< HEAD
   // Article 6.2 linkage surfaced from the project_details view.
   cooperativeApproachId?: string;
   authorizationPurpose?: string;
   acquiringPartyCountryCode?: string;
+=======
+>>>>>>> target/main
 }
 
 export interface ProgrammeU extends Programme {

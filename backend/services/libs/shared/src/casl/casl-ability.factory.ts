@@ -33,10 +33,13 @@ import { CreditAuditLog } from "../entities/credit.audit.log.entity";
 import { CreditAuditLogViewEntity } from "../view-entities/creditAuditLog.view.entity";
 import { DocumentEntity } from "../entities/document.entity";
 import { ProjectEntity } from "../entities/projects.entity";
+<<<<<<< HEAD
 import { CooperativeApproach } from "../entities/cooperative.approach.entity";
 import { CorrespondingAdjustment } from "../entities/corresponding.adjustment.entity";
 import { InitialReport } from "../entities/initial.report.entity";
 import { ItmoAccount } from "../entities/itmo.account.entity";
+=======
+>>>>>>> target/main
 
 type Subjects = InferSubjects<typeof EntitySubject> | "all";
 
@@ -167,6 +170,7 @@ export class CaslAbilityFactory {
         can(Action.Read, Investment);
         can(Action.Read, ProgrammeTransfer);
         can(Action.Read, Programme);
+<<<<<<< HEAD
         can(Action.Read, CooperativeApproach);
         can(Action.Read, CorrespondingAdjustment);
         can(Action.Read, InitialReport);
@@ -174,6 +178,8 @@ export class CaslAbilityFactory {
         // Party's ITMO accounts (holding + retirement + cancellation
         // buckets) so AEF Holdings reports can be produced.
         can(Action.Read, ItmoAccount);
+=======
+>>>>>>> target/main
 
         if (user.role !== Role.ViewOnly) {
           can(Action.Create, Emission);
@@ -184,9 +190,12 @@ export class CaslAbilityFactory {
           can(Action.Manage, DocumentAction);
           can(Action.Manage, Investment);
           can(Action.Manage, ProgrammeCertify);
+<<<<<<< HEAD
           can(Action.Manage, CooperativeApproach);
           can(Action.Manage, CorrespondingAdjustment);
           can(Action.Manage, InitialReport);
+=======
+>>>>>>> target/main
         }
 
         if (user.role === Role.Root) {
@@ -211,9 +220,12 @@ export class CaslAbilityFactory {
         can(Action.Read, Investment);
         can(Action.Read, Programme);
         can(Action.Read, ProgrammeTransfer);
+<<<<<<< HEAD
         can(Action.Read, CooperativeApproach);
         can(Action.Read, CorrespondingAdjustment);
         can(Action.Read, InitialReport);
+=======
+>>>>>>> target/main
 
         if (user.role !== Role.ViewOnly) {
           can(Action.Create, Emission);
@@ -224,9 +236,12 @@ export class CaslAbilityFactory {
           can(Action.Manage, ProgrammeTransferRequest);
           can(Action.Manage, ProgrammeTransfer);
           can(Action.Manage, ProgrammeCertify);
+<<<<<<< HEAD
           can(Action.Manage, CooperativeApproach);
           can(Action.Manage, CorrespondingAdjustment);
           can(Action.Manage, InitialReport);
+=======
+>>>>>>> target/main
         }
       }
 
@@ -234,7 +249,10 @@ export class CaslAbilityFactory {
         can(Action.Read, User);
         can(Action.Read, ProjectEntity);
         can(Action.Read, DocumentEntity);
+<<<<<<< HEAD
         can(Action.Read, CooperativeApproach);
+=======
+>>>>>>> target/main
         can([Action.Read], ProgrammeDocument);
         can(Action.Read, Programme, {
           currentStage: { $in: [ProgrammeStage.AUTHORISED] },
@@ -267,7 +285,10 @@ export class CaslAbilityFactory {
       if (user.companyRole === CompanyRole.PROJECT_DEVELOPER) {
         can(Action.Read, ProjectEntity);
         can(Action.Read, DocumentEntity);
+<<<<<<< HEAD
         can(Action.Read, CooperativeApproach);
+=======
+>>>>>>> target/main
         // can(Action.Read, Programme, {
         //   currentStage: { $eq: ProgrammeStage.AUTHORISED },
         // });

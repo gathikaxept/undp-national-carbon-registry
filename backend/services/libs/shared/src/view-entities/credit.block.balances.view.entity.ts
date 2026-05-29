@@ -2,10 +2,16 @@ import { ViewColumn, ViewEntity } from "typeorm";
 
 @ViewEntity({
   expression: `
+<<<<<<< HEAD
     SELECT
       cb."creditBlockId" AS "id",
       cb."serialNumber" AS "serialNumber",
       cb."itmoSerial" AS "itmoSerial",
+=======
+    SELECT 
+      cb."creditBlockId" AS "id",
+      cb."serialNumber" AS "serialNumber",
+>>>>>>> target/main
       (cb."creditAmount" - cb."reservedCreditAmount") AS "creditAmount",
       cb."createTime" AS "createdDate",
       cb."projectRefId" AS "projectId",
@@ -16,6 +22,7 @@ import { ViewColumn, ViewEntity } from "typeorm";
       cb."previousOwnerCompanyId" AS "senderId",
       s."name" AS "senderName",
       s."logo" AS "senderLogo",
+<<<<<<< HEAD
       CASE
         WHEN cb."isNotTransferred" = TRUE THEN 'issued'
         ELSE 'received'
@@ -25,6 +32,12 @@ import { ViewColumn, ViewEntity } from "typeorm";
       cb."accountType"::text AS "accountType",
       COALESCE(cb."omgeDeductedAtIssuance", FALSE) AS "omgeDeductedAtIssuance",
       COALESCE(cb."sopDeductedAtIssuance", FALSE) AS "sopDeductedAtIssuance"
+=======
+      CASE 
+        WHEN cb."isNotTransferred" = TRUE THEN 'issued'
+        ELSE 'received'
+      END AS "type"
+>>>>>>> target/main
     FROM credit_blocks_entity cb
     LEFT JOIN project_entity p ON cb."projectRefId" = p."refId"
     LEFT JOIN company r ON cb."ownerCompanyId" = r."companyId"
@@ -38,10 +51,13 @@ export class CreditBlockBalancesViewEntity {
   @ViewColumn()
   serialNumber: string;
 
+<<<<<<< HEAD
   // Dec 6/CMA.4 Annex I para 5 ITMO identifier.
   @ViewColumn()
   itmoSerial: string;
 
+=======
+>>>>>>> target/main
   @ViewColumn()
   creditAmount: number;
 
@@ -74,6 +90,7 @@ export class CreditBlockBalancesViewEntity {
 
   @ViewColumn()
   type: string;
+<<<<<<< HEAD
 
   @ViewColumn()
   cooperativeApproachId: string;
@@ -89,4 +106,6 @@ export class CreditBlockBalancesViewEntity {
 
   @ViewColumn()
   sopDeductedAtIssuance: boolean;
+=======
+>>>>>>> target/main
 }

@@ -5,21 +5,33 @@ import { ActivityEntity } from "../entities/activity.entity";
 
 @ViewEntity({
   expression: `
+<<<<<<< HEAD
     SELECT
       p."refId",
       p."title",
       p."serialNumber" as "serialNo",
       p."authorizationId",
       p."projectProposalStage",
+=======
+    SELECT 
+      p."refId", 
+      p."title", 
+      p."serialNumber" as "serialNo",
+      p."authorizationId",
+      p."projectProposalStage", 
+>>>>>>> target/main
       p."creditEst",
       p."creditBalance",
       p."creditRetired",
       p."creditTransferred",
       p."independentCertifiers" as "certifierId",
       p."noObjectionLetterUrl",
+<<<<<<< HEAD
       p."cooperativeApproachId",
       p."authorizationPurpose"::text AS "authorizationPurpose",
       p."acquiringPartyCountryCode",
+=======
+>>>>>>> target/main
       jsonb_build_object(
         'name', c."name",
         'logo', c."logo",
@@ -76,6 +88,7 @@ export class ProjectDetailsViewEntity {
   @ViewColumn()
   noObjectionLetterUrl: string;
 
+<<<<<<< HEAD
   // Article 6.2 linkage. Surfaced to the project detail page so a
   // user can see which cooperative approach a project sits under
   // and the authorization purpose / acquiring party that drives
@@ -89,5 +102,7 @@ export class ProjectDetailsViewEntity {
   @ViewColumn()
   acquiringPartyCountryCode: string;
 
+=======
+>>>>>>> target/main
   activities: ActivityEntity[];
 }

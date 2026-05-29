@@ -45,6 +45,7 @@ import { CreditBalancePage } from "./Pages/CreditPages/creditBalancePage";
 import { CreditTransfersPage } from "./Pages/CreditPages/creditTransfersPage";
 import { CreditRetirementsPage } from "./Pages/CreditPages/creditRetirementsPage";
 import Reports from "./Pages/Reports/Reports";
+<<<<<<< HEAD
 import CooperativeApproaches from "./Pages/CooperativeApproaches/cooperativeApproaches";
 import AddCooperativeApproach from "./Pages/CooperativeApproaches/addCooperativeApproach";
 import CooperativeApproachDetails from "./Pages/CooperativeApproaches/cooperativeApproachDetails";
@@ -54,6 +55,8 @@ import InitialReportManagement from "./Pages/InitialReport/initialReportManageme
 import CreateInitialReport from "./Pages/InitialReport/createInitialReport";
 import EditInitialReport from "./Pages/InitialReport/editInitialReport";
 import InitialReportDetails from "./Pages/InitialReport/initialReportDetails";
+=======
+>>>>>>> target/main
 
 const App = () => {
   const { t } = useTranslation(["common"]);
@@ -165,6 +168,7 @@ const App = () => {
                     />
                   </Route>
                   <Route
+<<<<<<< HEAD
                     path="/cooperativeApproaches"
                     element={
                       <CustomLayout selectedKey="cooperativeApproaches/viewAll" />
@@ -216,6 +220,8 @@ const App = () => {
                     />
                   </Route>
                   <Route
+=======
+>>>>>>> target/main
                     path="/companyManagement"
                     element={
                       <CustomLayout selectedKey="companyManagement/viewAll" />
